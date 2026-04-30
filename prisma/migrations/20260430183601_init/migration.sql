@@ -107,6 +107,87 @@ CREATE TABLE `media` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `plans` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `slug` VARCHAR(100) NOT NULL,
+    `title` VARCHAR(255) NOT NULL,
+    `description` TEXT NULL,
+    `amount` INTEGER NOT NULL,
+    `status` BOOLEAN NOT NULL DEFAULT true,
+    `createdAt` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `deletedAt` TIMESTAMP(6) NULL,
+
+    UNIQUE INDEX `plans_slug_key`(`slug`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `user_purchase_plans` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `user_id` INTEGER NOT NULL,
+    `plan_id` INTEGER NOT NULL,
+    `purchase_date` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `createdAt` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `deletedAt` TIMESTAMP(6) NULL,
+
+    INDEX `user_purchase_plans_user_id_idx`(`user_id`),
+    INDEX `user_purchase_plans_plan_id_idx`(`plan_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `transactions` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `user_purchase_plan_id` INTEGER NOT NULL,
+    `amount` INTEGER NOT NULL,
+    `transaction_id` VARCHAR(255) NOT NULL,
+    `purchase_date` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+
+    UNIQUE INDEX `transactions_transaction_id_key`(`transaction_id`),
+    INDEX `transactions_user_purchase_plan_id_idx`(`user_purchase_plan_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `cm_modules` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `parent_id` INTEGER NULL,
+    `name` VARCHAR(255) NOT NULL,
+    `route_name` VARCHAR(255) NULL,
+    `icon` VARCHAR(255) NULL,
+    `status` BOOLEAN NOT NULL DEFAULT true,
+    `sort_order` INTEGER NULL DEFAULT 0,
+    `created_at` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `updated_at` DATETIME(3) NOT NULL,
+    `deleted_at` TIMESTAMP(6) NULL,
+
+    INDEX `cm_modules_parent_id_idx`(`parent_id`),
+    INDEX `cm_modules_status_idx`(`status`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `cms_module_permissions` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `user_role_id` INTEGER NOT NULL,
+    `cms_module_id` INTEGER NOT NULL,
+    `is_add` BOOLEAN NOT NULL DEFAULT false,
+    `is_view` BOOLEAN NOT NULL DEFAULT false,
+    `is_update` BOOLEAN NOT NULL DEFAULT false,
+    `is_delete` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `updated_at` DATETIME(3) NOT NULL,
+    `deleted_at` TIMESTAMP(6) NULL,
+
+    INDEX `cms_module_permissions_user_role_id_idx`(`user_role_id`),
+    INDEX `cms_module_permissions_cms_module_id_idx`(`cms_module_id`),
+    UNIQUE INDEX `cms_module_permissions_user_role_id_cms_module_id_key`(`user_role_id`, `cms_module_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `UserApiToken` ADD CONSTRAINT `UserApiToken_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 
@@ -115,3 +196,21 @@ ALTER TABLE `user_address` ADD CONSTRAINT `user_address_userId_fkey` FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE `User` ADD CONSTRAINT `User_userGroupId_fkey` FOREIGN KEY (`userGroupId`) REFERENCES `user_role`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `user_purchase_plans` ADD CONSTRAINT `user_purchase_plans_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `user_purchase_plans` ADD CONSTRAINT `user_purchase_plans_plan_id_fkey` FOREIGN KEY (`plan_id`) REFERENCES `plans`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `transactions` ADD CONSTRAINT `transactions_user_purchase_plan_id_fkey` FOREIGN KEY (`user_purchase_plan_id`) REFERENCES `user_purchase_plans`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `cm_modules` ADD CONSTRAINT `cm_modules_parent_id_fkey` FOREIGN KEY (`parent_id`) REFERENCES `cm_modules`(`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `cms_module_permissions` ADD CONSTRAINT `cms_module_permissions_user_role_id_fkey` FOREIGN KEY (`user_role_id`) REFERENCES `user_role`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `cms_module_permissions` ADD CONSTRAINT `cms_module_permissions_cms_module_id_fkey` FOREIGN KEY (`cms_module_id`) REFERENCES `cm_modules`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;

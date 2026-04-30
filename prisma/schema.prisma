@@ -22,6 +22,7 @@ model UserRole {
   deletedAt    DateTime? @db.Timestamp(6)
 
   users User[]
+  modulePermissions CmsModulePermission[]
 
   @@map("user_role")
 }
@@ -104,6 +105,7 @@ model User {
   // ✅ Add this new relation 👇
   apiTokens UserApiToken[]
   addresses UserAddress[]
+  purchasePlans UserPurchasePlan[]
 
   @@index([name])
 }
@@ -123,6 +125,99 @@ model Media {
   @@index([relatedType, relatedId])
   @@map("media")
 }
+
+model Plan {
+  id          Int       @id @default(autoincrement())
+  slug        String    @unique @db.VarChar(100)
+  title       String    @db.VarChar(255)
+  description String?   @db.Text
+  amount      Int
+  status      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? @db.Timestamp(6)
+  purchases   UserPurchasePlan[]
+
+  @@map("plans")
+}
+
+model UserPurchasePlan {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  planId       Int      @map("plan_id")
+  purchaseDate DateTime @default(now()) @map("purchase_date") @db.Timestamp(6)
+  createdAt   DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([planId])
+  @@map("user_purchase_plans")
+}
+
+model Transaction {
+  id                 Int      @id @default(autoincrement())
+  userPurchasePlanId Int      @map("user_purchase_plan_id")
+  amount             Int
+  transactionId String   @unique @map("transaction_id") @db.VarChar(255)
+  purchaseDate  DateTime @default(now()) @map("purchase_date") @db.Timestamp(6)
+
+  userPurchasePlan UserPurchasePlan @relation(fields: [userPurchasePlanId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userPurchasePlanId])
+  @@map("transactions")
+}
+
+model CmModule {
+  id        Int       @id @default(autoincrement())
+  parentId  Int?      @map("parent_id")
+  name      String    @db.VarChar(255)
+  routeName String?   @map("route_name") @db.VarChar(255)
+  icon      String?   @db.VarChar(255)
+  status    Boolean   @default(true)
+  sortOrder Int?      @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  // Self-referential relation for parent-child hierarchy
+  parent   CmModule?  @relation("ModuleHierarchy", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  children CmModule[] @relation("ModuleHierarchy")
+
+  // Relation to module permissions
+  modulePermissions CmsModulePermission[]
+
+  @@index([parentId])
+  @@index([status])
+  @@map("cm_modules")
+}
+
+model CmsModulePermission {
+  id          Int       @id @default(autoincrement())
+  userRoleId  Int       @map("user_role_id")
+  cmsModuleId Int       @map("cms_module_id")
+  isAdd       Boolean   @default(false) @map("is_add")
+  isView      Boolean   @default(false) @map("is_view")
+  isUpdate    Boolean   @default(false) @map("is_update")
+  isDelete    Boolean   @default(false) @map("is_delete")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  // Relations
+  userRole  UserRole @relation(fields: [userRoleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cmsModule CmModule @relation(fields: [cmsModuleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userRoleId, cmsModuleId])
+  @@index([userRoleId])
+  @@index([cmsModuleId])
+  @@map("cms_module_permissions")
+}
+
 
 enum MediaType {
   IMAGE

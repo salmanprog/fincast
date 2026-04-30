@@ -14,11 +14,13 @@ export default function RegisterForm() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setFieldErrors({});
     if (password !== confirm) {
       setError("Passwords do not match.");
@@ -65,7 +67,9 @@ export default function RegisterForm() {
         window.location.assign("/");
         return;
       }
-      setError("Account created but no session token. Try logging in.");
+      setSuccess(
+        "Your account has been created successfully. Please log in with your credentials."
+      );
     } catch (err) {
       setError((err as Error).message || "Network error");
     } finally {
@@ -82,6 +86,20 @@ export default function RegisterForm() {
         <h1 className="text-xl font-bold text-slate-900">Create account</h1>
         <p className="mt-1 text-sm text-slate-500">Register for FinCast in a few steps.</p>
       </div>
+
+      {success ? (
+        <div
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900"
+          role="status"
+        >
+          <p>{success}</p>
+          <p className="mt-2">
+            <Link href="/login" className="font-semibold text-brand-700 underline hover:text-brand-800">
+              Go to log in
+            </Link>
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800" role="alert">
@@ -164,10 +182,10 @@ export default function RegisterForm() {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || Boolean(success)}
         className="w-full rounded-xl bg-brand-950 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:opacity-60"
       >
-        {loading ? "Creating account…" : "Create account"}
+        {loading ? "Creating account…" : success ? "Account created" : "Create account"}
       </button>
 
       <p className="text-center text-sm text-slate-600">

@@ -1,23 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSidebar } from '@/context/SidebarContext';
+import useApi from '@/utils/useApi';
 import {
   ChevronDown,
   ChevronUp,
   LayoutDashboard,
   Calendar,
   UserCircle,
-  List,
-  Table,
-  FileText,
-  PieChart,
   Boxes,
-  Plug,
-  Settings,
-  FolderOpen,
+  Clock,
+  Link as LinkIcon,
+  type LucideIcon,
 } from 'lucide-react';
 
 interface SubItem {
@@ -33,84 +30,82 @@ interface NavItem {
   subItems?: SubItem[];
 }
 
-const navItems: NavItem[] = [
+/** Matches `icon` strings stored on `cm_modules` (see prisma seed). */
+const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  UserCircle,
+  Boxes,
+  Calendar,
+  Clock,
+  Link: LinkIcon,
+};
+
+function iconFromKey(key: string | null | undefined): LucideIcon {
+  if (!key) return LayoutDashboard;
+  return SIDEBAR_ICON_MAP[key] ?? LayoutDashboard;
+}
+
+type SidebarModuleDto = {
+  name: string;
+  path?: string;
+  icon: string | null;
+  subItems?: { name: string; path: string }[];
+};
+
+function dtoToNavItem(dto: SidebarModuleDto): NavItem {
+  return {
+    icon: iconFromKey(dto.icon ?? undefined),
+    name: dto.name,
+    path: dto.path,
+    subItems: dto.subItems?.map((s) => ({
+      name: s.name,
+      path: s.path,
+      pro: false,
+    })),
+  };
+}
+
+const FALLBACK_NAV: NavItem[] = [
   {
     icon: LayoutDashboard,
     name: 'Dashboard',
     path: '/admin',
   },
-  // {
-    //   icon: Calendar,
-    //   name: 'Calendar',
-    //   path: '/calendar',
-    // },
-  {
-    icon: UserCircle,
-    name: 'Users',
-    subItems: [
-      { name: 'All Users', path: '/admin/users/', pro: false },
-    ],
-  },
-  // {
-  //   name: 'Forms',
-  //   icon: List,
-  //   subItems: [{ name: 'Form Elements', path: '/form-elements', pro: false }],
-  // },
-  // {
-  // {
-  //   name: 'Pages',
-  //   icon: FileText,
-  //   subItems: [
-  //     { name: 'Blank Page', path: '/blank', pro: false },
-  //     { name: '404 Error', path: '/error-404', pro: false },
-  //   ],
-  // },
-];
-
-const othersItems: NavItem[] = [
-  // {
-  //   icon: PieChart,
-  //   name: 'Charts',
-  //   subItems: [
-  //     { name: 'Line Chart', path: '/line-chart', pro: false },
-  //     { name: 'Bar Chart', path: '/bar-chart', pro: false },
-  //   ],
-  // },
-  // {
-  //   icon: Boxes,
-  //   name: 'UI Elements',
-  //   subItems: [
-  //     { name: 'Alerts', path: '/alerts', pro: false },
-  //     { name: 'Avatar', path: '/avatars', pro: false },
-  //     { name: 'Badge', path: '/badge', pro: false },
-  //     { name: 'Buttons', path: '/buttons', pro: false },
-  //     { name: 'Images', path: '/images', pro: false },
-  //     { name: 'Videos', path: '/videos', pro: false },
-  //   ],
-  // },
-  // {
-  //   icon: Plug,
-  //   name: 'Authentication',
-  //   subItems: [
-  //     { name: 'Sign In', path: '/signin', pro: false },
-  //     { name: 'Sign Up', path: '/signup', pro: false },
-  //   ],
-  // },
 ];
 
 const AppSidebar: React.FC = () => {
-  const { isExpanded, isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
+  const { isExpanded, isMobileOpen } = useSidebar();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  const { data, loading, fetchApi } = useApi({
+    url: '/api/admin/sidebar-modules',
+    method: 'GET',
+    type: 'manual',
+    requiresAuth: true,
+  });
+
+  useEffect(() => {
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('token') || sessionStorage.getItem('token')
+        : null;
+    if (token) {
+      void fetchApi();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load sidebar once on mount when token exists
+  }, []);
+
+  const navItems = useMemo(() => {
+    const payload = data as { items?: SidebarModuleDto[] } | null;
+    const list = payload?.items;
+    if (!list?.length) return FALLBACK_NAV;
+    return list.map(dtoToNavItem);
+  }, [data]);
+
+  const othersItems: NavItem[] = [];
 
   const toggleMenu = (menu: string) => {
     setOpenMenu(openMenu === menu ? null : menu);
-  };
-
-  // Close sidebar when clicking outside on mobile
-  const handleCloseMobile = () => {
-    if (isMobileOpen) {
-      toggleMobileSidebar();
-    }
   };
 
   const renderMenuItems = (items: NavItem[]) => (
@@ -127,13 +122,12 @@ const AppSidebar: React.FC = () => {
                   <nav.icon className="w-5 h-5 text-gray-600 dark:text-gray-300 shrink-0" />
                   {isExpanded && <span>{nav.name}</span>}
                 </span>
-                {isExpanded && (
-                  openMenu === nav.name ? (
+                {isExpanded &&
+                  (openMenu === nav.name ? (
                     <ChevronUp className="w-4 h-4" />
                   ) : (
                     <ChevronDown className="w-4 h-4" />
-                  )
-                )}
+                  ))}
               </button>
 
               {openMenu === nav.name && isExpanded && (
@@ -169,47 +163,35 @@ const AppSidebar: React.FC = () => {
   return (
     <aside
       className={`${
-        // Mobile: show/hide based on isMobileOpen
         isMobileOpen ? 'translate-x-0' : '-translate-x-full'
       } ${
-        // Desktop: always visible
         'lg:translate-x-0'
       } ${
-        // Desktop: width based on isExpanded
         isExpanded ? 'lg:w-64' : 'lg:w-20'
       } fixed top-0 left-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transform transition-all duration-300 z-50`}
     >
       <div className="p-4">
-        {/* Logo */}
         <div className={`flex items-center space-x-2 mb-6 justify-center ${!isExpanded ? 'justify-center' : ''}`}>
-        <Image src="/images/logo1.png" className={`${!isExpanded ? 'max-w-[50px]' : 'max-w-[150px]'}`} alt="Logo" width={250} height={250} />
+          <Image
+            src="/images/logo1.png"
+            className={`${!isExpanded ? 'max-w-[50px]' : 'max-w-[150px]'}`}
+            alt="Logo"
+            width={250}
+            height={250}
+          />
         </div>
 
-        {/* Navigation */}
-        <div className='overflow-y-auto max-h-[calc(100vh-140px)]'>
+        <div className="overflow-y-auto max-h-[calc(100vh-140px)]">
           {isExpanded && (
-            <h3 className="text-gray-500 text-sm uppercase mb-2">Main</h3>
+            <h3 className="text-gray-500 text-sm uppercase mb-2">
+              Main
+              {loading ? <span className="ml-2 text-xs font-normal normal-case">(loading…)</span> : null}
+            </h3>
           )}
           {renderMenuItems(navItems)}
-
-          {/* {isExpanded && (
-            <h3 className="text-gray-500 text-sm uppercase mt-6 mb-2">Others</h3>
-          )} */}
           {renderMenuItems(othersItems)}
         </div>
       </div>
-
-      {/* Bottom user/settings area */}
-      {/* <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <Link
-          href="/settings"
-          className={`flex items-center space-x-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg ${!isExpanded ? 'justify-center' : ''}`}
-          title={!isExpanded ? 'Settings' : undefined}
-        >
-          <Settings className="w-5 h-5 text-gray-600 dark:text-gray-300 shrink-0" />
-          {isExpanded && <span>Settings</span>}
-        </Link>
-      </div> */}
     </aside>
   );
 };

@@ -9,6 +9,7 @@ const protectedApiRoutes = [
   { path: "/api/users/gallery", methods: ["GET"] },
   { path: "/api/users/gallery-items", methods: ["GET"] },
   { path: "/api/admin/profile", methods: ["GET", "PATCH"] },
+  { path: "/api/admin/sidebar-modules", methods: ["GET"] },
   { path: "/api/admin/address", methods: ["POST", "GET", "PATCH", "DELETE"] },
   { path: "/api/admin/users", methods: ["POST", "GET", "PATCH", "DELETE"] },
   { path: "/api/currentuser", methods: ["GET"] },

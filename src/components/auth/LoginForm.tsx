@@ -51,6 +51,24 @@ export default function LoginForm() {
       if (token) {
         saveAuthToken(token);
         clearCurrentUserCache();
+        const params = new URLSearchParams(window.location.search);
+        const rawReturn = params.get("returnUrl");
+        const plan = params.get("plan");
+        const safeReturn =
+          rawReturn &&
+          rawReturn.startsWith("/") &&
+          !rawReturn.startsWith("//")
+            ? rawReturn
+            : null;
+        if (safeReturn && (plan === "starter" || plan === "pro")) {
+          const sep = safeReturn.includes("?") ? "&" : "?";
+          window.location.assign(`${safeReturn}${sep}plan=${plan}`);
+          return;
+        }
+        if (safeReturn) {
+          window.location.assign(safeReturn);
+          return;
+        }
         window.location.assign("/");
         return;
       }
