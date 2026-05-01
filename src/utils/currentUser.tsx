@@ -6,6 +6,7 @@ interface User {
   name: string;
   email: string;
   phone?: string;
+  credits?: number;
 }
 // Global cache for user data to avoid refetching on navigation
 let cachedUser: User | null = null;

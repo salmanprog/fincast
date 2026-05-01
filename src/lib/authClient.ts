@@ -27,3 +27,38 @@ export function clearAuthToken() {
   sessionStorage.removeItem("token");
   document.cookie = "token=; path=/; max-age=0";
 }
+
+/** Same sources as API requests: localStorage, sessionStorage, then cookie. */
+export function getStoredAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const fromStorage =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+  if (fromStorage) return fromStorage;
+  const match = document.cookie.match(/(?:^|;\s*)token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** Decode JWT payload (no verification; server verifies API calls). */
+export function getUserIdFromStoredToken(): number | null {
+  if (typeof window === "undefined") return null;
+  const token = getStoredAuthToken();
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = base64.length % 4;
+    if (pad) base64 += "=".repeat(4 - pad);
+    const payload = JSON.parse(atob(base64)) as { id?: unknown };
+    const raw = payload.id;
+    const id =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string"
+          ? parseInt(raw, 10)
+          : NaN;
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}

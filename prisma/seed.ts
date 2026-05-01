@@ -136,6 +136,7 @@ async function main() {
       title: "Starter",
       description: "1 forecast · One detailed 30-year report.",
       amount: 1000,
+      credits: 1,
       status: true,
     },
     {
@@ -143,6 +144,7 @@ async function main() {
       title: "Pro",
       description: "5 forecasts · Compare scenarios side-by-side.",
       amount: 3500,
+      credits: 5,
       status: true,
     },
     {
@@ -150,6 +152,7 @@ async function main() {
       title: "Enterprise",
       description: "Unlimited · For RIAs and family offices.",
       amount: 0,
+      credits: 0,
       status: true,
     },
   ] as const;
@@ -161,6 +164,7 @@ async function main() {
         title: plan.title,
         description: plan.description,
         amount: plan.amount,
+        credits: plan.credits,
         status: plan.status,
         deletedAt: null,
       },
@@ -213,6 +217,12 @@ async function main() {
     sortOrder: 1,
   });
 
+  const planPurchasesModule = await findOrCreateModule({
+    name: "Plan purchases",
+    routeName: "/admin/user-purchase-plans/",
+    icon: "Table",
+    sortOrder: sortOrder++,
+  });
 
   // Collect all modules for permission creation
   const superAdminModules = [
@@ -221,6 +231,7 @@ async function main() {
     allUsersModule,
     bookingsModule,
     allBookingsModule,
+    planPurchasesModule,
   ];
 
   const adminModules = [
@@ -229,12 +240,14 @@ async function main() {
     allUsersModule,
     bookingsModule,
     allBookingsModule,
+    planPurchasesModule,
   ];
 
   const clientModules = [
     dashboardModule,
     bookingsModule,
     allBookingsModule,
+    planPurchasesModule,
   ];
 
   const roleModuleMap = [

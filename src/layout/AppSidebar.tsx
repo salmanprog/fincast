@@ -14,6 +14,7 @@ import {
   Boxes,
   Clock,
   Link as LinkIcon,
+  Table,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,6 +39,7 @@ const SIDEBAR_ICON_MAP: Record<string, LucideIcon> = {
   Calendar,
   Clock,
   Link: LinkIcon,
+  Table,
 };
 
 function iconFromKey(key: string | null | undefined): LucideIcon {

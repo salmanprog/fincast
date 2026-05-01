@@ -95,6 +95,7 @@ model User {
   platformId        String?
   emailOtp          String?     @db.VarChar(100)
   emailOtpCreatedAt DateTime?
+  credits           Int         @default(0)
   createdAt         DateTime?   @db.Timestamp(6)
   updatedAt         DateTime?   @db.Timestamp(6)
   deletedAt         DateTime?   @db.Timestamp(6)
@@ -132,6 +133,7 @@ model Plan {
   title       String    @db.VarChar(255)
   description String?   @db.Text
   amount      Int
+  credits     Int       @default(0)
   status      Boolean   @default(true)
   createdAt   DateTime  @default(now()) @db.Timestamp(6)
   updatedAt   DateTime  @updatedAt

@@ -128,6 +128,13 @@ function FinCastPricingPageInner() {
   const enterpriseData = plans.enterprise ?? defaultPlanText.enterprise;
   const proBadge = defaultPlanText.pro.badge ?? "Most popular";
 
+  const balanceCredits =
+    loadingUser && getStoredToken() != null ? null : user?.credits ?? 0;
+  const balanceLabel =
+    balanceCredits === null
+      ? "…"
+      : `${balanceCredits} ${balanceCredits === 1 ? "credit" : "credits"}`;
+
   const startCheckout = useCallback(
     async (plan: Plan) => {
       setCheckoutError(null);
@@ -236,10 +243,16 @@ function FinCastPricingPageInner() {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Your balance
             </p>
-            <p className="text-lg font-bold text-slate-900">2 credits</p>
+            <p className="text-lg font-bold text-slate-900">{balanceLabel}</p>
           </div>
-          <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
-            Active
+          <span
+            className={
+              user
+                ? "shrink-0 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+                : "shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80"
+            }
+          >
+            {loadingUser && getStoredToken() ? "…" : user ? "Active" : "Guest"}
           </span>
         </div>
       </div>

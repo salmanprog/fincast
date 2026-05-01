@@ -1,17 +1,24 @@
 "use client";
 import { ThemeToggleButton } from "@/components/common/ThemeToggleButton";
-import NotificationDropdown from "@/components/header/NotificationDropdown";
 import UserDropdown from "@/components/header/UserDropdown";
 import { useSidebar } from "@/context/SidebarContext";
+import { useUser } from "@/context/UserContext";
 import Image from "next/image";
 import Link from "next/link";
-import { log } from "node:console";
+import { Coins } from "lucide-react";
 import React, { useState ,useEffect,useRef} from "react";
 
 const AppHeader: React.FC = () => {
   const [isApplicationMenuOpen, setApplicationMenuOpen] = useState(false);
+  const { user, loading: loadingUser } = useUser();
 
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar();
+
+  const credits = user?.credits ?? 0;
+  const creditsLabel =
+    loadingUser && user == null
+      ? "…"
+      : `${credits} ${credits === 1 ? "credit" : "credits"}`;
 
   const handleToggle = () => {
     if (window.innerWidth >= 1024) {
@@ -164,6 +171,13 @@ const AppHeader: React.FC = () => {
           <div className="flex items-center gap-2 2xsm:gap-3">
             {/* <!-- Dark Mode Toggler --> */}
             <ThemeToggleButton />
+            <span
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              title="Forecast credits"
+            >
+              <Coins className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              {creditsLabel}
+            </span>
             {/* <!-- Dark Mode Toggler --> */}
 
            {/* <NotificationDropdown />  */}

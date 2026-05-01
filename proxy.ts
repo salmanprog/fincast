@@ -12,6 +12,7 @@ const protectedApiRoutes = [
   { path: "/api/admin/sidebar-modules", methods: ["GET"] },
   { path: "/api/admin/address", methods: ["POST", "GET", "PATCH", "DELETE"] },
   { path: "/api/admin/users", methods: ["POST", "GET", "PATCH", "DELETE"] },
+  { path: "/api/admin/user-purchase-plans", methods: ["GET"] },
   { path: "/api/currentuser", methods: ["GET"] },
   { path: "/api/users/password", methods: ["POST"] },
   { path: "/api/admin/events/category", methods: ["POST", "GET", "PATCH", "DELETE"] },

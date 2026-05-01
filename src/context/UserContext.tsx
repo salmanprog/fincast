@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import useApi from "@/utils/useApi";
+import { getUserIdFromStoredToken } from "@/lib/authClient";
 
 interface UserContextType {
   user: any;
@@ -18,25 +19,26 @@ const UserContext = createContext<UserContextType>({
 });
 
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
+  const [profileId, setProfileId] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    setProfileId(getUserIdFromStoredToken() ?? undefined);
+  }, []);
+
   const { data, loading, fetchApi } = useApi({
-    url: "/api/admin/profile/1",
+    url: "/api/admin/profile",
     method: "GET",
     type: "manual",
     requiresAuth: true,
+    slug: profileId,
   });
 
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    const token =
-      localStorage.getItem("token") ||
-      sessionStorage.getItem("token") ||
-      getCookie("token");
-
-    if (token) {
-      fetchApi();
-    }
-  }, []);
+    if (profileId) void fetchApi();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- slug-driven manual fetch
+  }, [profileId]);
 
   useEffect(() => {
     if (data) setUser(data);
@@ -44,11 +46,6 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
   const refreshUser = async () => {
     await fetchApi();
-  };
-
-  const getCookie = (name: string) => {
-    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-    return match ? match[2] : null;
   };
 
   return (

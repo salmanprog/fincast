@@ -13,7 +13,9 @@ export default class AdminResource extends BaseResource<ExtendedUser> {
       id: user.id,
       slug: user.slug,
       name: user.name,
+      userType: user.userType,
       email: user.email,
+      credits: user.credits ?? 0,
       mobileNumber: user.mobileNumber,
       imageUrl: user.imageUrl
         ? `${process.env.NEXT_PUBLIC_APP_URL || ""}${user.imageUrl}`
@@ -24,6 +26,7 @@ export default class AdminResource extends BaseResource<ExtendedUser> {
             id: user.userRole.id,
             title: user.userRole.title,
             slug: user.userRole.slug,
+            isSuperAdmin: user.userRole.isSuperAdmin,
           }
         : null,
       // Include API tokens

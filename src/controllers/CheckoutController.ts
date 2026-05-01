@@ -168,9 +168,12 @@ export default class CheckoutController extends Controller {
     const planSlug = (session.metadata?.plan === "pro" ? "pro" : "starter") as string;
 
     try {
-      const plan = await prisma.plan.findFirst({
+      const planRow = await prisma.plan.findFirst({
         where: { slug: planSlug, deletedAt: null, status: true },
       });
+      const plan = planRow as
+        | (typeof planRow & { credits: number })
+        | null;
 
       if (!plan) {
         return NextResponse.json(
@@ -199,6 +202,15 @@ export default class CheckoutController extends Controller {
               purchaseDate: new Date(),
             },
           });
+
+          if (plan.credits > 0) {
+            await tx.user.update({
+              where: { id: userId },
+              data: {
+                credits: { increment: plan.credits },
+              } as Prisma.UserUncheckedUpdateInput,
+            });
+          }
         });
       } catch (e) {
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

@@ -14,6 +14,7 @@ export default class UserResource extends BaseResource<ExtendedUser> {
       slug: user.slug,
       name: user.name,
       email: user.email,
+      credits: user.credits ?? 0,
       mobileNumber: user.mobileNumber,
       imageUrl: user.imageUrl
         ? `${process.env.NEXT_PUBLIC_APP_URL || ""}${user.imageUrl}`
