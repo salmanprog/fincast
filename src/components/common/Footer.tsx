@@ -37,14 +37,6 @@ export default function Footer() {
                   Pricing
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/admin/dashboard"
-                  className="hover:text-brand-700"
-                >
-                  Dashboard
-                </Link>
-              </li>
             </ul>
           </div>
           <div>
@@ -58,11 +50,6 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="#security" className="hover:text-brand-700">
-                  Security
-                </a>
-              </li>
-              <li>
                 <a href="#terms" className="hover:text-brand-700">
                   Terms
                 </a>
@@ -72,9 +59,6 @@ export default function Footer() {
         </div>
         <div className="mt-12 flex flex-col gap-3 border-t border-slate-100 pt-8 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
           <p>© {year} FinCast. All rights reserved.</p>
-          <p className="text-slate-400">
-            SOC 2 · No data stored permanently
-          </p>
         </div>
       </div>
     </footer>

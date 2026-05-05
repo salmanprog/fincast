@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 640" fill="none" aria-hidden="true">
+  <!-- Same base tones as workflow-dark-bg; different motif: radial + soft chart silhouette -->
+  <defs>
+    <linearGradient id="ovb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161950"/>
+      <stop offset="50%" stop-color="#1c2064"/>
+      <stop offset="100%" stop-color="#121642"/>
+    </linearGradient>
+    <radialGradient id="ovGlow" cx="18%" cy="78%" r="52%">
+      <stop offset="0%" stop-color="rgb(70 95 255 / 0.18)"/>
+      <stop offset="50%" stop-color="rgb(38 46 137 / 0.07)"/>
+      <stop offset="100%" stop-color="rgb(22 22 66 / 0)"/>
+    </radialGradient>
+    <linearGradient id="ovCurve" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#465fff" stop-opacity="0"/>
+      <stop offset="45%" stop-color="#7592ff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#9cb9ff" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="ovStroke" x1="0%" x2="100%" y1="0%" y2="0%">
+      <stop offset="0%" stop-color="#9cb9ff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#465fff" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="640" fill="url(#ovb)"/>
+  <rect width="1440" height="640" fill="url(#ovGlow)"/>
+  <path
+    d="M60 420 C220 412 380 360 520 308 C680 248 820 268 980 232 C1120 202 1260 168 1380 148"
+    stroke="url(#ovStroke)"
+    stroke-width="2.25"
+    stroke-linecap="round"
+    fill="none"
+    opacity="0.42"
+  />
+  <path
+    d="M60 420 C220 412 380 360 520 308 C680 248 820 268 980 232 C1120 202 1260 168 1380 148 L1380 560 L60 560 Z"
+    fill="url(#ovCurve)"
+    opacity="0.55"
+  />
+  <path d="M100 80 L1180 560" stroke="#262e89" stroke-width="1" opacity="0.2"/>
+  <path d="M200 40 L1280 560" stroke="#262e89" stroke-width="1" opacity="0.12"/>
+  <circle cx="980" cy="232" r="7" fill="#161950" stroke="#7592ff" stroke-width="1.75"/>
+  <circle cx="520" cy="308" r="5" fill="#161950" stroke="#465fff" stroke-width="1.5"/>
+</svg>

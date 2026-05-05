@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 640" fill="none" aria-hidden="true">
+  <!-- FinCast brand tokens: 950=#161950, 900=#262e89, 500=#465fff, 400=#7592ff, 300=#9cb9ff -->
+  <defs>
+    <linearGradient id="wfb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161950"/>
+      <stop offset="50%" stop-color="#1c2064"/>
+      <stop offset="100%" stop-color="#121642"/>
+    </linearGradient>
+    <radialGradient id="wfGlow" cx="72%" cy="18%" r="48%">
+      <stop offset="0%" stop-color="rgb(70 95 255 / 0.2)"/>
+      <stop offset="55%" stop-color="rgb(38 46 137 / 0.06)"/>
+      <stop offset="100%" stop-color="rgb(22 22 66 / 0)"/>
+    </radialGradient>
+    <linearGradient id="wfLine" x1="0%" x2="100%" y1="0%" y2="0%">
+      <stop offset="0%" stop-color="#9cb9ff" stop-opacity="0.55"/>
+      <stop offset="50%" stop-color="#465fff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#7592ff" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="640" fill="url(#wfb)"/>
+  <rect width="1440" height="640" fill="url(#wfGlow)"/>
+  <path d="M0 120h1440M0 240h1440M0 360h1440M0 480h1440" stroke="#262e89" stroke-width="1" opacity="0.35"/>
+  <path d="M180 0v640M540 0v640M900 0v640" stroke="#262e89" stroke-width="1" opacity="0.25"/>
+  <path
+    d="M80 340 C260 332 440 296 620 284 C760 274 840 388 980 392 C1140 398 1260 300 1380 288"
+    stroke="url(#wfLine)"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-dasharray="14 22"
+    opacity="0.35"
+    fill="none"
+  />
+  <circle cx="320" cy="328" r="5" fill="#161950" stroke="#7592ff" stroke-width="1.5"/>
+  <circle cx="620" cy="284" r="5" fill="#161950" stroke="#465fff" stroke-width="1.5"/>
+  <circle cx="980" cy="392" r="5" fill="#161950" stroke="#9cb9ff" stroke-width="1.5"/>
+  <circle cx="1320" cy="292" r="6" fill="#161950" stroke="#7592ff" stroke-width="1.75"/>
+</svg>

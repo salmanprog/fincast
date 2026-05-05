@@ -11,13 +11,22 @@ import Link from "next/link";
 interface UserDetails {
   id: number;
   slug: string;
+  username: string;
   name: string | null;
+  lname: string | null;
   email: string | null;
   mobileNumber: string | null;
   imageUrl: string | null;
   dob: string | null;
   gender: string | null;
+  userType: string;
+  profileType: string;
+  platformType: string | null;
+  platformId: string | null;
   status: boolean;
+  isEmailVerify: boolean;
+  emailVerifyAt: string | null;
+  credits: number;
   createdAt: string;
   updatedAt: string;
   role: {
@@ -25,6 +34,19 @@ interface UserDetails {
     title: string;
     slug: string;
   } | null;
+}
+
+function formatDetailDate(iso: string | null | undefined): string {
+  if (!iso) return "N/A";
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return "N/A";
+  }
 }
 
 export default function UserDetailsPage() {
@@ -127,7 +149,7 @@ export default function UserDetailsPage() {
           <div className="flex-1">
             <div className="mb-4">
               <h3 className="text-xl font-semibold text-gray-800 dark:text-white/90 mb-2">
-                {user.name || "N/A"}
+                {[user.name, user.lname].filter(Boolean).join(" ") || "—"}
               </h3>
               <div className="flex items-center gap-2">
                 <Badge color={user.status ? "success" : "error"}>
@@ -140,48 +162,31 @@ export default function UserDetailsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
               <div>
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  User ID
+                  Profile slug
                 </label>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  #{user.id}
+                <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1 font-mono text-xs">
+                  {user.slug || "—"}
                 </p>
               </div>
 
               <div>
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Email Address
+                  Forecast credits
                 </label>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.email || "N/A"}
+                  {Number.isFinite(user.credits) ? user.credits : 0}
                 </p>
               </div>
 
               <div>
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Mobile Number
+                  Email
                 </label>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.mobileNumber || "N/A"}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Date of Birth
-                </label>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.dob || "N/A"}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Gender
-                </label>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.gender || "N/A"}
+                  {user.email || "—"}
                 </p>
               </div>
 
@@ -190,37 +195,16 @@ export default function UserDetailsPage() {
                   Role
                 </label>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.role?.title || "N/A"}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Member Since
-                </label>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.createdAt
-                    ? new Date(user.createdAt).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })
-                    : "N/A"}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Last Updated
-                </label>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90 mt-1">
-                  {user.updatedAt
-                    ? new Date(user.updatedAt).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })
-                    : "N/A"}
+                  {user.role ? (
+                    <>
+                      {user.role.title}
+                      <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">
+                        ({user.role.slug})
+                      </span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </p>
               </div>
             </div>

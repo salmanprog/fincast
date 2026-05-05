@@ -200,6 +200,13 @@ async function main() {
     sortOrder: 1,
   });
 
+  const forecastsModule = await findOrCreateModule({
+    name: "Forecasts",
+    routeName: "/admin/forecasts/",
+    icon: "ListIcon",
+    sortOrder: sortOrder++,
+  });
+
   // MAIN SECTION - Bookings (Parent)
   const bookingsModule = await findOrCreateModule({
     name: "Bookings",
@@ -245,6 +252,7 @@ async function main() {
 
   const clientModules = [
     dashboardModule,
+    forecastsModule,
     bookingsModule,
     allBookingsModule,
     planPurchasesModule,

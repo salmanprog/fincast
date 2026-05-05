@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" fill="none" aria-hidden="true">
+  <!-- Placeholder: forecast bundle / advisory ROI (FinCast brand palette) -->
+  <defs>
+    <linearGradient id="piCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ecf3ff"/>
+    </linearGradient>
+    <linearGradient id="piAccent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#465fff"/>
+      <stop offset="100%" stop-color="#7592ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="560" height="420" rx="24" fill="#f8fafc"/>
+  <rect x="36" y="44" width="488" height="332" rx="20" fill="url(#piCard)" stroke="#c2d6ff" stroke-width="2"/>
+  <text x="56" y="84" fill="#161950" font-family="ui-sans-serif,system-ui,sans-serif" font-size="15" font-weight="700">
+    Forecast bundle preview
+  </text>
+  <text x="56" y="108" fill="#475569" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">
+    Illustrative - replace with product screenshot when ready
+  </text>
+  <rect x="56" y="132" width="200" height="72" rx="12" fill="#dde9ff" stroke="#9cb9ff" stroke-width="1"/>
+  <text x="72" y="162" fill="#262e89" font-family="ui-sans-serif,system-ui,sans-serif" font-size="13" font-weight="600">
+    50 forecasts
+  </text>
+  <text x="72" y="184" fill="#3641f5" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="600">
+    Core pack
+  </text>
+  <rect x="276" y="132" width="228" height="72" rx="12" fill="#ffffff" stroke="#c2d6ff" stroke-width="1"/>
+  <path d="M296 168l10 10 18-22" stroke="#3641f5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="336" y="172" fill="#0f172a" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12" font-weight="600">
+    Ready for client meetings
+  </text>
+  <text x="336" y="190" fill="#64748b" font-family="ui-sans-serif,system-ui,sans-serif" font-size="10">
+    Run scenario, export clarity
+  </text>
+  <rect x="56" y="226" width="448" height="130" rx="14" fill="#ffffff" stroke="#dde9ff" stroke-width="1.5"/>
+  <rect x="72" y="248" width="8" height="88" rx="3" fill="#e2e8f0"/>
+  <rect x="92" y="268" width="8" height="68" rx="3" fill="url(#piAccent)" opacity="0.85"/>
+  <rect x="112" y="252" width="8" height="84" rx="3" fill="#c2d6ff"/>
+  <rect x="132" y="278" width="8" height="58" rx="3" fill="url(#piAccent)" opacity="0.55"/>
+  <rect x="152" y="262" width="8" height="74" rx="3" fill="#e2e8f0"/>
+  <text x="200" y="276" fill="#161950" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12" font-weight="600">
+    Cost vs. typical advisory revenue
+  </text>
+  <text x="200" y="298" fill="#64748b" font-family="ui-sans-serif,system-ui,sans-serif" font-size="10">
+    FinCast remains a small line item relative to fees captured per household.
+  </text>
+  <rect x="200" y="312" width="288" height="8" rx="4" fill="#ecf3ff"/>
+  <rect x="200" y="312" width="72" height="8" rx="4" fill="url(#piAccent)" opacity="0.9"/>
+  <rect x="200" y="328" width="288" height="8" rx="4" fill="#ecf3ff"/>
+  <rect x="200" y="328" width="220" height="8" rx="4" fill="#9cb9ff" opacity="0.55"/>
+</svg>
