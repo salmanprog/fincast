@@ -56,9 +56,6 @@ export default function FincastFrontendNav() {
           </span>
           <span className="flex items-baseline gap-2 font-semibold tracking-tight text-slate-900">
             <span className="text-lg">FinCast</span>
-            <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-brand-700">
-              V1.0
-            </span>
           </span>
         </Link>
 
