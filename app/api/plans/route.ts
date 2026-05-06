@@ -14,6 +14,7 @@ export async function GET() {
         title: true,
         description: true,
         amount: true,
+        credits: true,
         status: true,
       },
     });

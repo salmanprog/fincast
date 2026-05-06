@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Playfair_Display } from "next/font/google";
-import { Check, CreditCard, Mail } from "lucide-react";
+import { CreditCard, Mail } from "lucide-react";
 import { useCurrentUser } from "@/utils/currentUser";
 
 const playfair = Playfair_Display({
@@ -13,31 +13,7 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
-const starterFeatures = [
-  "Full Monte Carlo report",
-  "PDF export",
-  "Risk score breakdown",
-  "Email delivery",
-];
-
-const proFeatures = [
-  "Everything in Starter",
-  "Scenario comparison",
-  "Withdrawal strategy optimizer",
-  "Roth conversion modeling",
-  "Priority processing",
-];
-
-const enterpriseFeatures = [
-  "Unlimited forecasts",
-  "White-label PDF reports",
-  "API access",
-  "Dedicated account manager",
-  "Custom Excel engine integrations",
-];
-
-type Plan = "starter" | "pro";
-type DisplayPlan = "starter" | "pro" | "enterprise";
+type CheckoutSlug = "starter" | "pro";
 
 type PlanFromApi = {
   id: number;
@@ -45,30 +21,55 @@ type PlanFromApi = {
   title: string;
   description: string | null;
   amount: number;
+  credits: number;
   status: boolean;
 };
 
-const defaultPlanText: Record<
-  DisplayPlan,
-  { title: string; amount: number; description: string; badge?: string }
-> = {
-  starter: {
+function isCheckoutSlug(slug: string): slug is CheckoutSlug {
+  return slug === "starter" || slug === "pro";
+}
+
+/** Fallback when /api/plans fails (matches seeded defaults) */
+const FALLBACK_PLANS: PlanFromApi[] = [
+  {
+    id: 0,
+    slug: "starter",
     title: "Starter",
-    amount: 1000,
     description: "1 forecast · One detailed 30-year report.",
+    amount: 1250,
+    credits: 50,
+    status: true,
   },
-  pro: {
+  {
+    id: 0,
+    slug: "pro",
     title: "Pro",
-    amount: 3500,
     description: "5 forecasts · Compare scenarios side-by-side.",
-    badge: "Most popular",
+    amount: 2200,
+    credits: 100,
+    status: true,
   },
-  enterprise: {
+  {
+    id: 0,
+    slug: "enterprise",
     title: "Enterprise",
-    amount: 0,
     description: "Unlimited · For RIAs and family offices.",
+    amount: 4750,
+    credits: 250,
+    status: true,
   },
-};
+  {
+    id: 0,
+    slug: "custom",
+    title: "Custom",
+    description: "Customized plan for your needs.",
+    amount: 15000,
+    credits: 1000,
+    status: true,
+  },
+];
+
+const PRO_BADGE = "Most popular";
 
 function formatUsd(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -87,12 +88,15 @@ function FinCastPricingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loadingUser } = useCurrentUser();
-  const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<CheckoutSlug | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [plans, setPlans] = useState<Partial<Record<DisplayPlan, PlanFromApi>>>(
-    {}
-  );
+  const [planRows, setPlanRows] = useState<PlanFromApi[]>([]);
+  const [hasMounted, setHasMounted] = useState(false);
   const autoCheckoutDone = useRef(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -106,15 +110,9 @@ function FinCastPricingPageInner() {
         };
         const list = json.data?.plans ?? [];
         if (!isMounted || !Array.isArray(list)) return;
-        const nextPlans: Partial<Record<DisplayPlan, PlanFromApi>> = {};
-        for (const p of list) {
-          if (p.slug === "starter" || p.slug === "pro" || p.slug === "enterprise") {
-            nextPlans[p.slug] = p;
-          }
-        }
-        setPlans(nextPlans);
+        setPlanRows(list as PlanFromApi[]);
       } catch {
-        // keep static fallback values
+        // keep empty → FALLBACK_PLANS in render
       }
     };
     void loadPlans();
@@ -123,20 +121,20 @@ function FinCastPricingPageInner() {
     };
   }, []);
 
-  const starterData = plans.starter ?? defaultPlanText.starter;
-  const proData = plans.pro ?? defaultPlanText.pro;
-  const enterpriseData = plans.enterprise ?? defaultPlanText.enterprise;
-  const proBadge = defaultPlanText.pro.badge ?? "Most popular";
+  const displayPlans = planRows.length > 0 ? planRows : FALLBACK_PLANS;
+
+  /** Avoid reading localStorage during SSR/first paint — fixes hydration mismatch */
+  const tokenHintWhileLoading = hasMounted && getStoredToken() != null;
 
   const balanceCredits =
-    loadingUser && getStoredToken() != null ? null : user?.credits ?? 0;
+    loadingUser && tokenHintWhileLoading ? null : user?.credits ?? 0;
   const balanceLabel =
     balanceCredits === null
       ? "…"
       : `${balanceCredits} ${balanceCredits === 1 ? "credit" : "credits"}`;
 
   const startCheckout = useCallback(
-    async (plan: Plan) => {
+    async (plan: CheckoutSlug) => {
       setCheckoutError(null);
       const token = getStoredToken();
       if (!user || !token) {
@@ -190,7 +188,7 @@ function FinCastPricingPageInner() {
     [router, user]
   );
 
-  const onPlanClick = (plan: Plan) => {
+  const onPlanClick = (plan: CheckoutSlug) => {
     if (loadingUser) return;
     if (!user) {
       router.push(
@@ -203,10 +201,10 @@ function FinCastPricingPageInner() {
 
   useEffect(() => {
     if (loadingUser || !user || autoCheckoutDone.current) return;
-    const plan = searchParams.get("plan");
-    if (plan !== "starter" && plan !== "pro") return;
+    const planParam = searchParams.get("plan");
+    if (!planParam || !isCheckoutSlug(planParam)) return;
     autoCheckoutDone.current = true;
-    void startCheckout(plan);
+    void startCheckout(planParam);
   }, [loadingUser, user, searchParams, startCheckout]);
 
   return (
@@ -252,113 +250,87 @@ function FinCastPricingPageInner() {
                 : "shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80"
             }
           >
-            {loadingUser && getStoredToken() ? "…" : user ? "Active" : "Guest"}
+            {loadingUser && tokenHintWhileLoading ? "…" : user ? "Active" : "Guest"}
           </span>
         </div>
       </div>
 
-      <div className="mx-auto mt-12 grid max-w-6xl gap-5 lg:grid-cols-3 lg:items-stretch">
-        <div className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            {starterData.title}
-          </p>
-          <p className="mt-3 text-2xl font-bold text-slate-900">
-            {formatUsd(starterData.amount)}
-          </p>
-          <p className="text-sm text-slate-500">one-time</p>
-          <p className="mt-4 text-sm text-slate-600">
-            {starterData.description}
-          </p>
-          <ul className="mt-4 flex flex-1 flex-col gap-2.5 text-sm text-slate-800">
-            {starterFeatures.map((f) => (
-              <li key={f} className="flex items-center gap-2.5">
-                <Check
-                  className="h-4 w-4 shrink-0 text-emerald-600"
-                  strokeWidth={2.5}
-                />
-                {f}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            disabled={loadingUser || checkoutPlan === "starter"}
-            onClick={() => onPlanClick("starter")}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-950 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:opacity-60"
-          >
-            <CreditCard className="h-4 w-4" />
-            {checkoutPlan === "starter" ? "Redirecting…" : "Get Starter"}
-          </button>
-        </div>
+      <div className="mx-auto mt-12 grid max-w-6xl gap-5 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch">
+        {displayPlans.map((plan) => {
+          const featured = plan.slug === "pro";
+          const canStripeCheckout = isCheckoutSlug(plan.slug);
+          const salesHref = `mailto:sales@fincast.com?subject=${encodeURIComponent(`FinCast ${plan.title}`)}`;
 
-        <div className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-sky-500/30 bg-slate-900 p-6 text-white shadow-xl lg:-mt-1 lg:scale-[1.02]">
-          <span className="absolute right-4 top-4 rounded-full bg-sky-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-            {proBadge}
-          </span>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
-            {proData.title}
-          </p>
-          <p className="mt-3 text-2xl font-bold text-white">
-            {formatUsd(proData.amount)}
-          </p>
-          <p className="text-sm text-slate-400">one-time</p>
-          <p className="mt-4 text-sm text-slate-300">
-            {proData.description}
-          </p>
-          <ul className="mt-4 flex flex-1 flex-col gap-2.5 text-sm text-slate-200">
-            {proFeatures.map((f) => (
-              <li key={f} className="flex items-center gap-2.5">
-                <Check
-                  className="h-4 w-4 shrink-0 text-sky-400"
-                  strokeWidth={2.5}
-                />
-                {f}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            disabled={loadingUser || checkoutPlan === "pro"}
-            onClick={() => onPlanClick("pro")}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-sky-400 hover:to-blue-500 disabled:opacity-60"
-          >
-            <CreditCard className="h-4 w-4" />
-            {checkoutPlan === "pro" ? "Redirecting…" : "Get Pro"}
-          </button>
-        </div>
+          if (featured) {
+            return (
+              <div
+                key={`${plan.slug}-${plan.id}`}
+                className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-sky-500/30 bg-slate-900 p-6 text-white shadow-xl xl:-mt-1 xl:scale-[1.02]"
+              >
+                <span className="absolute right-4 top-4 rounded-full bg-sky-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  {PRO_BADGE}
+                </span>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                  {plan.title}
+                </p>
+                <p className="mt-3 text-2xl font-bold text-white">
+                  {formatUsd(plan.amount)}
+                </p>
+                <p className="text-sm text-slate-400">one-time</p>
+                <p className="mt-1 text-sm font-medium text-sky-200/90">
+                  {plan.credits}{" "}
+                  {plan.credits === 1 ? "credit" : "credits"}
+                </p>
+                <p className="mt-4 text-sm text-slate-300">
+                  {plan.description ?? ""}
+                </p>
+                <button
+                  type="button"
+                  disabled={loadingUser || checkoutPlan === "pro"}
+                  onClick={() => onPlanClick("pro")}
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-sky-400 hover:to-blue-500 disabled:opacity-60"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  {checkoutPlan === "pro" ? "Redirecting…" : `Purchase`}
+                </button>
+              </div>
+            );
+          }
 
-        <div className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            {enterpriseData.title}
-          </p>
-          <p
-            className={`mt-3 text-2xl font-bold text-slate-900 ${playfair.className}`}
-          >
-            Custom
-          </p>
-          <p className="text-sm text-slate-500">&nbsp;</p>
-          <p className="mt-4 text-sm text-slate-600">
-            {enterpriseData.description}
-          </p>
-          <ul className="mt-4 flex flex-1 flex-col gap-2.5 text-sm text-slate-800">
-            {enterpriseFeatures.map((f) => (
-              <li key={f} className="flex items-center gap-2.5">
-                <Check
-                  className="h-4 w-4 shrink-0 text-emerald-600"
-                  strokeWidth={2.5}
-                />
-                {f}
-              </li>
-            ))}
-          </ul>
-          <a
-            href="mailto:sales@fincast.com?subject=FinCast%20Enterprise"
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-          >
-            <Mail className="h-4 w-4" />
-            Contact sales
-          </a>
-        </div>
+          return (
+            <div
+              key={`${plan.slug}-${plan.id}`}
+              className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                {plan.title}
+              </p>
+              <p
+                className={`mt-3 text-2xl font-bold text-slate-900 ${plan.slug === "custom" ? playfair.className : ""}`}
+              >
+                {formatUsd(plan.amount)}
+              </p>
+              <p className="text-sm text-slate-500">one-time</p>
+              <p className="mt-1 text-sm font-medium text-slate-600">
+                {plan.credits} {plan.credits === 1 ? "credit" : "credits"}
+              </p>
+              <p className="mt-4 text-sm text-slate-600">
+                {plan.description ?? ""}
+              </p>
+                <button
+                  type="button"
+                  disabled={loadingUser || checkoutPlan === plan.slug}
+                  onClick={() => onPlanClick(plan.slug as CheckoutSlug)}
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-950 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:opacity-60"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  {checkoutPlan === plan.slug
+                    ? "Redirecting…"
+                    : `Purchase`}
+                </button>
+            </div>
+          );
+        })}
       </div>
 
       <p className="mx-auto mt-6 text-center text-sm text-slate-600">

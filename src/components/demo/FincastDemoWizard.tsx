@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Playfair_Display } from "next/font/google";
 import {
   ArrowRight,
@@ -11,6 +12,10 @@ import {
   TrendingDown,
   TriangleAlert,
 } from "lucide-react";
+
+import { useCurrentUser } from "@/utils/currentUser";
+
+const DEMO_GUEST_USED_KEY = "fincast_demo_guest_used";
 
 type InputState = {
   clientAge: number;
@@ -105,16 +110,108 @@ function parseNumber(raw: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function useCountUp(target: number, durationMs = 1000): number {
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setValue(Math.round(target));
+      return;
+    }
+    let frame = 0;
+    let start = 0;
+    const step = (ts: number) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / durationMs, 1);
+      setValue(Math.round(target * progress));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [target, durationMs]);
+
+  return value;
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Industry-style line draw (SVG stroke-dash trick); remount with animKey to replay */
+function AnimatedStrokePath({
+  d,
+  stroke,
+  strokeWidth,
+  animKey,
+  durSec = 1.85,
+}: {
+  d: string;
+  stroke: string;
+  strokeWidth: number;
+  animKey: string;
+  durSec?: number;
+}) {
+  if (!d) return null;
+  if (prefersReducedMotion()) {
+    return (
+      <path d={d} fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+    );
+  }
+  return (
+    <path
+      key={animKey}
+      d={d}
+      fill="none"
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      pathLength={1}
+      strokeDasharray={1}
+      strokeDashoffset={1}
+    >
+      <animate
+        attributeName="stroke-dashoffset"
+        from="1"
+        to="0"
+        dur={`${durSec}s`}
+        fill="freeze"
+      />
+    </path>
+  );
+}
+
 function serializeInputs(s: InputState): string {
   return JSON.stringify(s);
 }
 
 export default function FincastDemoWizard() {
+  const { user, loadingUser } = useCurrentUser();
+  const [hasMounted, setHasMounted] = useState(false);
   const [phase, setPhase] = useState<FlowPhase>("assumptions");
   const [inputs, setInputs] = useState<InputState>(DEFAULT_INPUTS);
   const [committedInputs, setCommittedInputs] = useState<InputState>(DEFAULT_INPUTS);
   const [activeAdjustment, setActiveAdjustment] = useState<AdjustmentKey | null>(null);
   const [resultEmail, setResultEmail] = useState("");
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  const guestDemoConsumed =
+    hasMounted &&
+    typeof window !== "undefined" &&
+    localStorage.getItem(DEMO_GUEST_USED_KEY) === "1";
+  const guestDemoBlocked =
+    hasMounted && !loadingUser && !user && guestDemoConsumed && phase === "assumptions";
+
+  const userCredits = user?.credits ?? 0;
+  const creditsBlocked =
+    hasMounted && !loadingUser && !!user && userCredits <= 0 && phase === "assumptions";
+  const demoUiBlocked = guestDemoBlocked || creditsBlocked;
 
   const assumptionsDirty = useMemo(
     () => serializeInputs(inputs) !== serializeInputs(committedInputs),
@@ -208,6 +305,35 @@ export default function FincastDemoWizard() {
       ? null
       : simulation.depletionAge - committedInputs.retirementAge;
 
+  const assumptionsW = 520;
+  const assumptionsH = 220;
+  const assumptionsChartPath = pathFromPoints(simulation.points, assumptionsW, assumptionsH);
+  const assumptionsChartFillPath = assumptionsChartPath
+    ? `${assumptionsChartPath} L ${assumptionsW} ${assumptionsH} L 0 ${assumptionsH} Z`
+    : "";
+
+  const lastPointAssets = simulation.points[simulation.points.length - 1]?.assets ?? 0;
+  const chartAnimKey = useMemo(
+    () =>
+      `${committedInputs.currentPortfolio}-${committedInputs.annualSpending}-${committedInputs.planningAge}-${simulation.depletionAge ?? "ok"}-${simulation.points.length}-${Math.round(lastPointAssets)}`,
+    [
+      committedInputs.currentPortfolio,
+      committedInputs.annualSpending,
+      committedInputs.planningAge,
+      simulation.depletionAge,
+      simulation.points.length,
+      lastPointAssets,
+    ]
+  );
+
+  const portfolioCount = useCountUp(committedInputs.currentPortfolio, 1200);
+  const depletionAgeCount = useCountUp(simulation.depletionAge ?? 0, 900);
+  const planningHorizonCount = useCountUp(committedInputs.planningAge, 850);
+  const yearsAfterRetireCount = useCountUp(yearsAfterRetire ?? 0, 750);
+  const runwayYearsCount = useCountUp(runwayExtensionYears, 700);
+  const clientAgeLabelCount = useCountUp(committedInputs.clientAge, 550);
+  const planningAgeLabelCount = useCountUp(committedInputs.planningAge, 650);
+
   const highRisk = !sustainable;
   const riskLabel = highRisk ? "High risk" : "Low risk";
   const riskBody = highRisk
@@ -225,11 +351,20 @@ export default function FincastDemoWizard() {
   };
 
   const goToOutlook = () => {
+    if (user && userCredits <= 0) {
+      return;
+    }
+    if (!user && typeof window !== "undefined" && localStorage.getItem(DEMO_GUEST_USED_KEY) === "1") {
+      return;
+    }
     if (assumptionsDirty) {
       setCommittedInputs({ ...inputs });
     }
     setActiveAdjustment(null);
     setPhase("outlook");
+    if (!user && typeof window !== "undefined") {
+      localStorage.setItem(DEMO_GUEST_USED_KEY, "1");
+    }
   };
 
   if (phase === "outlook") {
@@ -284,7 +419,7 @@ export default function FincastDemoWizard() {
               </span>
             </div>
             <p className="mt-3 text-2xl font-bold text-slate-900 md:text-3xl">
-              {money.format(committedInputs.currentPortfolio)}
+              {money.format(portfolioCount)}
             </p>
             <p className="text-sm text-slate-500">
               Starting at age {committedInputs.retirementAge}
@@ -317,8 +452,30 @@ export default function FincastDemoWizard() {
                     </text>
                   </g>
                 ))}
-                {linePathToFill ? <path d={linePathToFill} fill="url(#outlookFill)" /> : null}
-                {linePath ? <path d={linePath} fill="none" stroke="#2563eb" strokeWidth="2.5" /> : null}
+                {linePathToFill ? (
+                  prefersReducedMotion() ? (
+                    <path d={linePathToFill} fill="url(#outlookFill)" />
+                  ) : (
+                    <path d={linePathToFill} fill="url(#outlookFill)" opacity="0">
+                      <animate
+                        attributeName="opacity"
+                        from="0"
+                        to="1"
+                        dur="0.55s"
+                        begin="0.4s"
+                        fill="freeze"
+                      />
+                    </path>
+                  )
+                ) : null}
+                {linePath ? (
+                  <AnimatedStrokePath
+                    d={linePath}
+                    stroke="#2563eb"
+                    strokeWidth={2.5}
+                    animKey={`outlook-${chartAnimKey}`}
+                  />
+                ) : null}
                 {depletionX !== null && depletionPoint ? (
                   <>
                     <line
@@ -368,15 +525,15 @@ export default function FincastDemoWizard() {
                 {simulation.depletionAge !== null ? (
                   <>
                     <TrendingDown className="h-5 w-5 text-rose-500" />
-                    Age {simulation.depletionAge}
+                    Age {depletionAgeCount}
                   </>
                 ) : (
-                  <>Sustain through {committedInputs.planningAge}</>
+                  <>Sustain through {planningHorizonCount}</>
                 )}
               </p>
               {yearsAfterRetire !== null ? (
                 <p className="mt-1 text-sm text-slate-500">
-                  {yearsAfterRetire} years after retirement
+                  {yearsAfterRetireCount} years after retirement
                 </p>
               ) : (
                 <p className="mt-1 text-sm text-slate-500">Through planning horizon</p>
@@ -408,7 +565,7 @@ export default function FincastDemoWizard() {
               <p className="mt-2 text-sm text-slate-800">
                 Reducing annual spending by <strong>{money.format(spendReduction)}</strong> could
                 extend your runway by at least{" "}
-                <strong>{runwayExtensionYears > 0 ? `${runwayExtensionYears}` : "8"}+</strong>{" "}
+                <strong>{runwayExtensionYears > 0 ? `${runwayYearsCount}` : "8"}+</strong>{" "}
                 years.
               </p>
             </div>
@@ -522,6 +679,50 @@ export default function FincastDemoWizard() {
         <p className="text-xs text-slate-500">Retirement Sustainability Analysis</p>
       </div>
 
+      {creditsBlocked ? (
+        <div
+          className="mb-4 rounded-xl border border-rose-200/90 bg-rose-50/90 px-4 py-3 text-sm text-rose-950 shadow-sm"
+          role="alert"
+        >
+          <p className="font-semibold text-rose-950">You have 0 credits</p>
+          <p className="mt-1.5 leading-relaxed text-rose-900/95">
+            Purchase a plan first to run forecasts with your account.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center rounded-lg bg-brand-950 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brand-900"
+            >
+              View plans
+            </Link>
+          </div>
+        </div>
+      ) : guestDemoBlocked ? (
+        <div
+          className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-sm"
+          role="alert"
+        >
+          <p className="font-semibold text-amber-950">You&apos;ve used your free guest demo</p>
+          <p className="mt-1.5 leading-relaxed text-amber-900/95">
+            For more forecasts, purchase a plan. If you already have an account, log in to continue.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center rounded-lg bg-brand-950 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brand-900"
+            >
+              View plans
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex items-center rounded-lg border border-amber-300/80 bg-white px-3.5 py-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-100/80"
+            >
+              Log in
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-[35%_65%]">
         <aside className="rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-blue-light-700">
@@ -552,8 +753,11 @@ export default function FincastDemoWizard() {
                     type="text"
                     value={display}
                     inputMode="decimal"
+                    readOnly={demoUiBlocked}
                     onChange={(e) => updateField(key, parseNumber(e.target.value))}
-                    className="h-9 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-sm font-semibold text-slate-900 outline-none ring-blue-300 transition focus:ring-2"
+                    className={`h-9 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-sm font-semibold text-slate-900 outline-none ring-blue-300 transition focus:ring-2 ${
+                      demoUiBlocked ? "cursor-not-allowed bg-slate-100 opacity-80" : ""
+                    }`}
                   />
                   {idx === 3 ? <span className="col-span-2 my-1 h-px bg-slate-100" aria-hidden /> : null}
                 </label>
@@ -564,10 +768,13 @@ export default function FincastDemoWizard() {
           <button
             type="button"
             onClick={goToOutlook}
+            disabled={demoUiBlocked}
             className={`mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-              assumptionsDirty
-                ? "bg-brand-950 text-white hover:bg-brand-900"
-                : "bg-slate-800 text-white hover:bg-slate-700"
+              demoUiBlocked
+                ? "cursor-not-allowed bg-slate-300 text-slate-500"
+                : assumptionsDirty
+                  ? "bg-brand-950 text-white hover:bg-brand-900"
+                  : "bg-slate-800 text-white hover:bg-slate-700"
             }`}
           >
             {assumptionsDirty ? "Calculate" : "Analysis"}
@@ -603,14 +810,39 @@ export default function FincastDemoWizard() {
 
           <div className="mt-3 rounded-xl border border-slate-200 p-3">
             <svg viewBox="0 0 520 220" className="h-[190px] w-full" aria-label="Asset trajectory">
+              <defs>
+                <linearGradient id="demoAssumptFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(37 99 235 / 0.2)" />
+                  <stop offset="100%" stopColor="rgb(37 99 235 / 0)" />
+                </linearGradient>
+              </defs>
               <rect x="0" y="0" width="520" height="220" fill="#ffffff" />
               <line x1="0" y1="210" x2="520" y2="210" stroke="#e2e8f0" strokeWidth="1" />
-              <path
-                d={pathFromPoints(simulation.points, 520, 220)}
-                fill="none"
-                stroke="#2563eb"
-                strokeWidth="3"
-              />
+              {assumptionsChartFillPath ? (
+                prefersReducedMotion() ? (
+                  <path d={assumptionsChartFillPath} fill="url(#demoAssumptFill)" />
+                ) : (
+                  <path d={assumptionsChartFillPath} fill="url(#demoAssumptFill)" opacity="0">
+                    <animate
+                      attributeName="opacity"
+                      from="0"
+                      to="1"
+                      dur="0.5s"
+                      begin="0.35s"
+                      fill="freeze"
+                    />
+                  </path>
+                )
+              ) : null}
+              {assumptionsChartPath ? (
+                <AnimatedStrokePath
+                  d={assumptionsChartPath}
+                  stroke="#2563eb"
+                  strokeWidth={3}
+                  animKey={`asmp-${chartAnimKey}`}
+                  durSec={1.7}
+                />
+              ) : null}
               {depletionPoint ? (
                 <>
                   <line
@@ -643,8 +875,8 @@ export default function FincastDemoWizard() {
               ) : null}
             </svg>
             <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
-              <span>Age {committedInputs.clientAge}</span>
-              <span>Age {committedInputs.planningAge}</span>
+              <span>Age {clientAgeLabelCount}</span>
+              <span>Age {planningAgeLabelCount}</span>
             </div>
           </div>
 
@@ -653,33 +885,42 @@ export default function FincastDemoWizard() {
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
+                disabled={demoUiBlocked}
                 onClick={() => setActiveAdjustment("spendDown")}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                  activeAdjustment === "spendDown"
-                    ? "bg-brand-600 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  demoUiBlocked
+                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                    : activeAdjustment === "spendDown"
+                      ? "bg-brand-600 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 Reduce Spending 10%
               </button>
               <button
                 type="button"
+                disabled={demoUiBlocked}
                 onClick={() => setActiveAdjustment("returnUp")}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                  activeAdjustment === "returnUp"
-                    ? "bg-brand-600 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  demoUiBlocked
+                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                    : activeAdjustment === "returnUp"
+                      ? "bg-brand-600 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 Increase Return to 7%
               </button>
               <button
                 type="button"
+                disabled={demoUiBlocked}
                 onClick={() => setActiveAdjustment("delayRetirement")}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                  activeAdjustment === "delayRetirement"
-                    ? "bg-brand-600 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  demoUiBlocked
+                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                    : activeAdjustment === "delayRetirement"
+                      ? "bg-brand-600 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 Delay Retirement 2 Years
@@ -716,7 +957,12 @@ export default function FincastDemoWizard() {
             <button
               type="button"
               onClick={goToOutlook}
-              className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-400"
+              disabled={demoUiBlocked}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                demoUiBlocked
+                  ? "cursor-not-allowed bg-slate-500 text-slate-200"
+                  : "bg-brand-500 text-white hover:bg-brand-400"
+              }`}
             >
               View full outlook
             </button>
