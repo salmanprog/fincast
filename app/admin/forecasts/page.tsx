@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Download, Eye } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -14,7 +14,8 @@ import useApi from "@/utils/useApi";
 import { useUser } from "@/context/UserContext";
 
 type ForecastRow = {
-  id: number;
+  id: string;
+  userId: number;
   name: string;
   years: number;
   updatedAt: string;
@@ -33,16 +34,26 @@ function formatDateOnly(iso: string) {
   }
 }
 
-function refCode(id: number) {
-  return `FC-${String(id).padStart(4, "0")}`;
+function stableHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
-function displayRisk(id: number): "Low" | "Moderate" {
-  return id % 3 === 0 ? "Moderate" : "Low";
+function refCode(id: string) {
+  const compact = id.replace(/-/g, "").slice(0, 10).toUpperCase();
+  return `FC-${compact}`;
 }
 
-function displayStatus(id: number): "Complete" | "Processing" {
-  return id % 5 === 0 ? "Processing" : "Complete";
+function displayRisk(id: string): "Low" | "Moderate" {
+  return stableHash(id) % 3 === 0 ? "Moderate" : "Low";
+}
+
+function displayStatus(id: string): "Complete" | "Processing" {
+  return stableHash(`${id}|status`) % 5 === 0 ? "Processing" : "Complete";
 }
 
 function downloadSummary(row: ForecastRow) {
@@ -68,7 +79,7 @@ export default function ForecastsPage() {
   const { user } = useUser();
   const [rows, setRows] = useState<ForecastRow[]>([]);
   const { data, loading, fetchApi } = useApi({
-    url: "/api/admin/projections",
+    url: "/api/forecasts",
     method: "GET",
     type: "manual",
     requiresAuth: true,
@@ -94,7 +105,7 @@ export default function ForecastsPage() {
     }
   }, [data]);
 
-  const colCount = isAdminReporter ? 9 : 8;
+  const colCount = isAdminReporter ? 10 : 8;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6">
@@ -104,8 +115,8 @@ export default function ForecastsPage() {
         </h3>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           {isAdminReporter
-            ? "Reporting view: every forecast projection in the system."
-            : "Forecast projections linked to your account only."}{" "}
+            ? "Reporting view: every saved forecast in the system (by owner userId)."
+            : "Saved forecasts for your user id only."}{" "}
           <Link
             href="/admin/forecasts/new"
             className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
@@ -126,12 +137,20 @@ export default function ForecastsPage() {
                 ID
               </TableCell>
               {isAdminReporter ? (
-                <TableCell
-                  isHeader
-                  className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-                >
-                  Customer
-                </TableCell>
+                <>
+                  <TableCell
+                    isHeader
+                    className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    User ID
+                  </TableCell>
+                  <TableCell
+                    isHeader
+                    className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    Customer
+                  </TableCell>
+                </>
               ) : null}
               <TableCell
                 isHeader
@@ -173,7 +192,7 @@ export default function ForecastsPage() {
                 isHeader
                 className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
               >
-                PDF
+                Actions
               </TableCell>
             </TableRow>
           </TableHeader>
@@ -195,12 +214,17 @@ export default function ForecastsPage() {
                       {r.id}
                     </TableCell>
                     {isAdminReporter ? (
-                      <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
-                        <div className="font-medium text-gray-800 dark:text-white/90">
-                          {r.user?.name || "—"}
-                        </div>
-                        <div className="text-xs text-gray-500">{r.user?.email || "—"}</div>
-                      </TableCell>
+                      <>
+                        <TableCell className="py-3 font-mono text-theme-sm text-gray-600 dark:text-gray-400">
+                          {r.userId}
+                        </TableCell>
+                        <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
+                          <div className="font-medium text-gray-800 dark:text-white/90">
+                            {r.user?.name || "—"}
+                          </div>
+                          <div className="text-xs text-gray-500">{r.user?.email || "—"}</div>
+                        </TableCell>
+                      </>
                     ) : null}
                     <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
                       <span className="font-medium text-gray-800 dark:text-white/90">
@@ -231,14 +255,15 @@ export default function ForecastsPage() {
                       )}
                     </TableCell>
                     <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
-                      <button
-                        type="button"
-                        onClick={() => downloadSummary(r)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                      >
-                        <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        PDF
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/admin/forecasts/${r.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                        >
+                          <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          View
+                        </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

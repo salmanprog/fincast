@@ -21,7 +21,7 @@ model UserRole {
   updatedAt    DateTime? @db.Timestamp(6)
   deletedAt    DateTime? @db.Timestamp(6)
 
-  users User[]
+  users             User[]
   modulePermissions CmsModulePermission[]
 
   @@map("user_role")
@@ -77,7 +77,7 @@ model User {
   createdBy         Int         @default(0)
   userType          UserType    @default(USER)
   name              String?     @db.VarChar(255)
-  lname              String?     @db.VarChar(255)
+  lname             String?     @db.VarChar(255)
   username          String      @unique @default("temp_username") @db.VarChar(150)
   slug              String      @unique @default("temp_slug") @db.VarChar(150)
   email             String?     @unique @db.VarChar(150)
@@ -104,9 +104,10 @@ model User {
   userRole UserRole? @relation(fields: [userGroupId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   // ✅ Add this new relation 👇
-  apiTokens UserApiToken[]
-  addresses UserAddress[]
+  apiTokens     UserApiToken[]
+  addresses     UserAddress[]
   purchasePlans UserPurchasePlan[]
+  forecasts     Forecast[]
 
   @@index([name])
 }
@@ -117,7 +118,7 @@ model Media {
   url         String    @db.Text
   type        MediaType @default(IMAGE)
   relatedType String?   @db.VarChar(100) // e.g., "Event", "User"
-  relatedId   Int?      // the ID of the related entity
+  relatedId   Int? // the ID of the related entity
   status      Boolean   @default(true)
   createdAt   DateTime  @default(now()) @db.Timestamp(6)
   updatedAt   DateTime  @updatedAt
@@ -128,32 +129,32 @@ model Media {
 }
 
 model Plan {
-  id          Int       @id @default(autoincrement())
-  slug        String    @unique @db.VarChar(100)
-  title       String    @db.VarChar(255)
-  description String?   @db.Text
+  id          Int                @id @default(autoincrement())
+  slug        String             @unique @db.VarChar(100)
+  title       String             @db.VarChar(255)
+  description String?            @db.Text
   amount      Int
-  credits     Int       @default(0)
-  status      Boolean   @default(true)
-  createdAt   DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime? @db.Timestamp(6)
+  credits     Int                @default(0)
+  status      Boolean            @default(true)
+  createdAt   DateTime           @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?          @db.Timestamp(6)
   purchases   UserPurchasePlan[]
 
   @@map("plans")
 }
 
 model UserPurchasePlan {
-  id           Int      @id @default(autoincrement())
-  userId       Int      @map("user_id")
-  planId       Int      @map("plan_id")
-  purchaseDate DateTime @default(now()) @map("purchase_date") @db.Timestamp(6)
-  createdAt   DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime? @db.Timestamp(6)
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  planId       Int       @map("plan_id")
+  purchaseDate DateTime  @default(now()) @map("purchase_date") @db.Timestamp(6)
+  createdAt    DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime? @db.Timestamp(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plan         Plan          @relation(fields: [planId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   transactions Transaction[]
 
   @@index([userId])
@@ -165,8 +166,8 @@ model Transaction {
   id                 Int      @id @default(autoincrement())
   userPurchasePlanId Int      @map("user_purchase_plan_id")
   amount             Int
-  transactionId String   @unique @map("transaction_id") @db.VarChar(255)
-  purchaseDate  DateTime @default(now()) @map("purchase_date") @db.Timestamp(6)
+  transactionId      String   @unique @map("transaction_id") @db.VarChar(255)
+  purchaseDate       DateTime @default(now()) @map("purchase_date") @db.Timestamp(6)
 
   userPurchasePlan UserPurchasePlan @relation(fields: [userPurchasePlanId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -220,6 +221,76 @@ model CmsModulePermission {
   @@map("cms_module_permissions")
 }
 
+model Forecast {
+  id                         String  @id @default(cuid())
+  userId                     Int
+  user                       User    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  title                      String? @db.VarChar(255)
+  forecastYears              Int
+  beginningBalance           Float
+  totalRealEstateValue       Float
+  annualLastingFunds         Float
+  recurringExpensesPerYear   Float
+  retirementAge              Int
+  returnOnInvestmentRate     Float
+  costOfLivingInflationRate  Float
+  incomeGrowthRate           Float
+  realEstateAppreciationRate Float
+  withdrawalTaxRate          Float
+  recurringExpensesNotes     String? @db.Text
+
+  source1AmountPerYear Float @default(0)
+  source1BeginningYear Int   @default(0)
+  source1EndingYear    Int   @default(0)
+
+  source2AmountPerYear Float @default(0)
+  source2BeginningYear Int   @default(0)
+  source2EndingYear    Int   @default(0)
+
+  purchase1Description String? @db.VarChar(500)
+  purchase1Year        Int     @default(0)
+  purchase1Amount      Float   @default(0)
+
+  purchase2Description String? @db.VarChar(500)
+  purchase2Year        Int     @default(0)
+  purchase2Amount      Float   @default(0)
+
+  rows ForecastRow[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("forecasts")
+}
+
+model ForecastRow {
+  id         String   @id @default(cuid())
+  forecastId String
+  forecast   Forecast @relation(fields: [forecastId], references: [id], onDelete: Cascade)
+
+  yearNumber        Int
+  age               Int
+  beginningBalance  Float
+  investmentGain    Float
+  lastingFunds      Float
+  source1Amount     Float
+  source2Amount     Float
+  totalSources      Float
+  recurringExpenses Float
+  oneTimePurchases  Float
+  totalUses         Float
+  netFlowBeforeTax  Float
+  withdrawalTax     Float
+  finalNetFlow      Float
+  endingBalance     Float
+  realEstateValue   Float
+
+  createdAt DateTime @default(now())
+
+  @@index([forecastId])
+  @@map("forecast_rows")
+}
 
 enum MediaType {
   IMAGE

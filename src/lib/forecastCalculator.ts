@@ -67,15 +67,16 @@ export function percent(value: number): number {
 }
 
 export function getTermSourceAmount(source: TermSource | undefined, yearNumber: number): number {
+  
   if (!source) return 0;
   const { amountPerYear, beginningYear, endingYear } = source;
   if (!Number.isFinite(amountPerYear) || !Number.isFinite(beginningYear) || !Number.isFinite(endingYear)) {
     return 0;
   }
-  if (yearNumber >= beginningYear && yearNumber <= endingYear) {
+  //if (yearNumber >= beginningYear && yearNumber <= endingYear) {
     return amountPerYear;
-  }
-  return 0;
+ // }
+  //return 0;
 }
 
 export function getOneTimePurchaseTotal(
@@ -93,11 +94,11 @@ export function getOneTimePurchaseTotal(
 
 export function calculateForecast(input: ForecastInput): ForecastYearRow[] {
   const forecastYears = Math.max(0, Math.floor(input.forecastYears));
-  const roiRate = percent(input.returnOnInvestmentRate);
-  const inflationRate = percent(input.costOfLivingInflationRate);
-  const incomeGrowthRate = percent(input.incomeGrowthRate);
-  const realEstateRate = percent(input.realEstateAppreciationRate);
-  const withdrawalTaxRate = percent(input.withdrawalTaxRate);
+  const roiRate = input.returnOnInvestmentRate;
+  const inflationRate = input.costOfLivingInflationRate;
+  const incomeGrowthRate = input.incomeGrowthRate;
+  const realEstateRate = input.realEstateAppreciationRate;
+  const withdrawalTaxRate = input.withdrawalTaxRate;
 
   const results: ForecastYearRow[] = [];
 
@@ -105,16 +106,17 @@ export function calculateForecast(input: ForecastInput): ForecastYearRow[] {
   let lastingFunds = Number(input.annualLastingFunds || 0);
   let recurringExpenses = Number(input.recurringExpensesPerYear || 0);
   let realEstateValue = Number(input.totalRealEstateValue || 0);
-
+  recurringExpenses = roundMoney((recurringExpenses * inflationRate) + recurringExpenses);
   for (let yearNumber = 1; yearNumber <= forecastYears; yearNumber += 1) {
-    const age = input.retirementAge + yearNumber - 1;
+    const age = input.retirementAge + yearNumber -1;
 
     if (yearNumber > 1) {
       lastingFunds = roundMoney(lastingFunds * (1 + incomeGrowthRate));
       recurringExpenses = roundMoney(recurringExpenses * (1 + inflationRate));
       realEstateValue = roundMoney(realEstateValue * (1 + realEstateRate));
     }
-
+    console.log("recurringExpenses", recurringExpenses);
+    
     const beginningBalance = roundMoney(balance);
 
     const source1AmountRaw = getTermSourceAmount(input.source1, yearNumber);
@@ -122,8 +124,7 @@ export function calculateForecast(input: ForecastInput): ForecastYearRow[] {
     const source1Amount = roundMoney(source1AmountRaw);
     const source2Amount = roundMoney(source2AmountRaw);
     const oneTimePurchases = roundMoney(getOneTimePurchaseTotal(input.purchases, yearNumber));
-
-    const investmentGain = roundMoney(beginningBalance * roiRate);
+    const investmentGain = beginningBalance * roiRate;
     const totalSources = roundMoney(investmentGain + lastingFunds + source1Amount + source2Amount);
     const totalUses = roundMoney(recurringExpenses + oneTimePurchases);
     const netFlowBeforeTax = roundMoney(totalSources - totalUses);

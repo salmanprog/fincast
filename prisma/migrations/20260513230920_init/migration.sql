@@ -190,6 +190,68 @@ CREATE TABLE `cms_module_permissions` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `forecasts` (
+    `id` VARCHAR(191) NOT NULL,
+    `userId` INTEGER NOT NULL,
+    `title` VARCHAR(255) NULL,
+    `forecastYears` INTEGER NOT NULL,
+    `beginningBalance` DOUBLE NOT NULL,
+    `totalRealEstateValue` DOUBLE NOT NULL,
+    `annualLastingFunds` DOUBLE NOT NULL,
+    `recurringExpensesPerYear` DOUBLE NOT NULL,
+    `retirementAge` INTEGER NOT NULL,
+    `returnOnInvestmentRate` DOUBLE NOT NULL,
+    `costOfLivingInflationRate` DOUBLE NOT NULL,
+    `incomeGrowthRate` DOUBLE NOT NULL,
+    `realEstateAppreciationRate` DOUBLE NOT NULL,
+    `withdrawalTaxRate` DOUBLE NOT NULL,
+    `recurringExpensesNotes` TEXT NULL,
+    `source1AmountPerYear` DOUBLE NOT NULL DEFAULT 0,
+    `source1BeginningYear` INTEGER NOT NULL DEFAULT 0,
+    `source1EndingYear` INTEGER NOT NULL DEFAULT 0,
+    `source2AmountPerYear` DOUBLE NOT NULL DEFAULT 0,
+    `source2BeginningYear` INTEGER NOT NULL DEFAULT 0,
+    `source2EndingYear` INTEGER NOT NULL DEFAULT 0,
+    `purchase1Description` VARCHAR(500) NULL,
+    `purchase1Year` INTEGER NOT NULL DEFAULT 0,
+    `purchase1Amount` DOUBLE NOT NULL DEFAULT 0,
+    `purchase2Description` VARCHAR(500) NULL,
+    `purchase2Year` INTEGER NOT NULL DEFAULT 0,
+    `purchase2Amount` DOUBLE NOT NULL DEFAULT 0,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    INDEX `forecasts_userId_idx`(`userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `forecast_rows` (
+    `id` VARCHAR(191) NOT NULL,
+    `forecastId` VARCHAR(191) NOT NULL,
+    `yearNumber` INTEGER NOT NULL,
+    `age` INTEGER NOT NULL,
+    `beginningBalance` DOUBLE NOT NULL,
+    `investmentGain` DOUBLE NOT NULL,
+    `lastingFunds` DOUBLE NOT NULL,
+    `source1Amount` DOUBLE NOT NULL,
+    `source2Amount` DOUBLE NOT NULL,
+    `totalSources` DOUBLE NOT NULL,
+    `recurringExpenses` DOUBLE NOT NULL,
+    `oneTimePurchases` DOUBLE NOT NULL,
+    `totalUses` DOUBLE NOT NULL,
+    `netFlowBeforeTax` DOUBLE NOT NULL,
+    `withdrawalTax` DOUBLE NOT NULL,
+    `finalNetFlow` DOUBLE NOT NULL,
+    `endingBalance` DOUBLE NOT NULL,
+    `realEstateValue` DOUBLE NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `forecast_rows_forecastId_idx`(`forecastId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `UserApiToken` ADD CONSTRAINT `UserApiToken_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 
@@ -216,3 +278,9 @@ ALTER TABLE `cms_module_permissions` ADD CONSTRAINT `cms_module_permissions_user
 
 -- AddForeignKey
 ALTER TABLE `cms_module_permissions` ADD CONSTRAINT `cms_module_permissions_cms_module_id_fkey` FOREIGN KEY (`cms_module_id`) REFERENCES `cm_modules`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE `forecasts` ADD CONSTRAINT `forecasts_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `forecast_rows` ADD CONSTRAINT `forecast_rows_forecastId_fkey` FOREIGN KEY (`forecastId`) REFERENCES `forecasts`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

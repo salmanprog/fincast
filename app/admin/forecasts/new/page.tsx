@@ -10,8 +10,10 @@ import Button from "@/components/ui/button/Button";
 import {
   calculateForecast,
   toNumber,
+  type ForecastInput,
   type ForecastYearRow,
 } from "@/lib/forecastCalculator";
+import { validateForecastFormPayload } from "@/lib/forecastSaveValidation";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -81,25 +83,25 @@ export type ForecastSavePayload = {
 
 const initialFormData = (): FormDataState => ({
   forecastYears: "30",
-  beginningBalance: "",
+  beginningBalance: "100000",
   totalRealEstateValue: "",
-  annualLastingFunds: "",
-  recurringExpensesPerYear: "",
-  retirementAge: "",
-  returnOnInvestmentRate: "",
-  costOfLivingInflationRate: "",
-  incomeGrowthRate: "",
-  realEstateAppreciationRate: "0",
-  withdrawalTaxRate: "",
+  annualLastingFunds: "6000",
+  recurringExpensesPerYear: "50000",
+  retirementAge: "65",
+  returnOnInvestmentRate: "0.055",
+  costOfLivingInflationRate: "0.030",
+  incomeGrowthRate: "0.028",
+  realEstateAppreciationRate: "14.00",
+  withdrawalTaxRate: "0.040",
   source1: {
-    amountPerYear: "",
-    beginningYear: "",
-    endingYear: "",
+    amountPerYear: "200",
+    beginningYear: "2000",
+    endingYear: "2005",
   },
   source2: {
-    amountPerYear: "",
-    beginningYear: "",
-    endingYear: "",
+    amountPerYear: "400",
+    beginningYear: "2006",
+    endingYear: "2010",
   },
   recurringExpensesNotes: "",
   purchases: [
@@ -147,49 +149,21 @@ function buildForecastPayload(formData: FormDataState): ForecastSavePayload {
   };
 }
 
-function isNonNegativeFinite(n: number): boolean {
-  return Number.isFinite(n) && n >= 0;
-}
-
-function validatePayload(payload: ForecastSavePayload): string[] {
-  const errors: string[] = [];
-
-  if (!isNonNegativeFinite(payload.beginningBalance)) {
-    errors.push("Beginning balance is required and must be zero or greater.");
+function collectTrimRequiredErrors(formData: FormDataState): string[] {
+  const errs: string[] = [];
+  if (formData.retirementAge.trim() === "") errs.push("Retirement age is required.");
+  if (formData.recurringExpensesPerYear.trim() === "") {
+    errs.push("Recurring expenses per year is required.");
   }
-  if (!isNonNegativeFinite(payload.forecastYears) || payload.forecastYears <= 0) {
-    errors.push("Forecast years is required and must be greater than zero.");
+  if (formData.returnOnInvestmentRate.trim() === "") {
+    errs.push("Return on investment rate is required.");
   }
-
-  const numericChecks: Array<{ label: string; value: number }> = [
-    { label: "Total value of real estate", value: payload.totalRealEstateValue },
-    { label: "Annual lasting funds", value: payload.annualLastingFunds },
-    { label: "Recurring expenses per year", value: payload.recurringExpensesPerYear },
-    { label: "Retirement age", value: payload.retirementAge },
-    { label: "Return on investment rate", value: payload.returnOnInvestmentRate },
-    { label: "Cost of living inflation rate", value: payload.costOfLivingInflationRate },
-    { label: "Income growth rate", value: payload.incomeGrowthRate },
-    { label: "Real estate appreciation rate", value: payload.realEstateAppreciationRate },
-    { label: "Withdrawal tax rate", value: payload.withdrawalTaxRate },
-    { label: "Source 1 amount per year", value: payload.source1.amountPerYear },
-    { label: "Source 1 beginning year", value: payload.source1.beginningYear },
-    { label: "Source 1 ending year", value: payload.source1.endingYear },
-    { label: "Source 2 amount per year", value: payload.source2.amountPerYear },
-    { label: "Source 2 beginning year", value: payload.source2.beginningYear },
-    { label: "Source 2 ending year", value: payload.source2.endingYear },
-    { label: "Purchase 1 year", value: payload.purchases[0].year },
-    { label: "Purchase 1 amount", value: payload.purchases[0].amount },
-    { label: "Purchase 2 year", value: payload.purchases[1].year },
-    { label: "Purchase 2 amount", value: payload.purchases[1].amount },
-  ];
-
-  for (const { label, value } of numericChecks) {
-    if (!Number.isFinite(value) || value < 0) {
-      errors.push(`${label} cannot be negative or invalid.`);
-    }
+  if (formData.costOfLivingInflationRate.trim() === "") {
+    errs.push("Cost of living inflation rate is required.");
   }
-
-  return errors;
+  if (formData.incomeGrowthRate.trim() === "") errs.push("Income growth rate is required.");
+  if (formData.withdrawalTaxRate.trim() === "") errs.push("Withdrawal tax rate is required.");
+  return errs;
 }
 
 export default function ForecastNewPage() {
@@ -198,6 +172,7 @@ export default function ForecastNewPage() {
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<"beginningBalance" | "forecastYears", string>>>({});
   const [forecastRows, setForecastRows] = useState<ForecastYearRow[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     document.title = "Admin | New forecast";
@@ -229,7 +204,7 @@ export default function ForecastNewPage() {
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitErrors([]);
     const nextField: Partial<Record<"beginningBalance" | "forecastYears", string>> = {};
 
@@ -246,21 +221,62 @@ export default function ForecastNewPage() {
       return;
     }
 
+    const trimErrors = collectTrimRequiredErrors(formData);
+    if (trimErrors.length > 0) {
+      setSubmitErrors(trimErrors);
+      setForecastRows([]);
+      return;
+    }
+
     const payload = buildForecastPayload(formData);
     console.log("Raw formData:", formData);
     console.log("Forecast payload:", payload);
 
-    const errors = validatePayload(payload);
+    const payloadForCalc: ForecastInput = { ...payload };
+    const errors = validateForecastFormPayload(payloadForCalc);
     if (errors.length > 0) {
       setSubmitErrors(errors);
       setForecastRows([]);
       return;
     }
 
-    const results = calculateForecast(payload);
+    const results = calculateForecast(payloadForCalc);
     setForecastRows(results);
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("token") || sessionStorage.getItem("token")
+        : null;
+    if (!token) {
+      window.alert("Please sign in to save your forecast.");
+      return;
+    }
 
-    console.log("Forecast results:", results);
+    setSaving(true);
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      };
+
+      const res = await fetch("/api/forecasts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as { success?: boolean; forecastId?: string; message?: string };
+
+      if (!res.ok || !data.success || !data.forecastId) {
+        const msg = data.message || `Save failed (${res.status})`;
+        window.alert(msg);
+        return;
+      }
+
+      router.push("/admin/forecasts");
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Network error while saving forecast.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const finalEndingBalance = forecastRows[forecastRows.length - 1]?.endingBalance ?? 0;
@@ -286,7 +302,7 @@ export default function ForecastNewPage() {
           <Button type="button" variant="outline" size="sm" onClick={() => router.push("/admin/forecasts")}>
             Cancel
           </Button>
-          <Button type="button" size="sm" onClick={handleSubmit}>
+          <Button type="button" size="sm" loading={saving} disabled={saving} onClick={handleSubmit}>
             Save forecast
           </Button>
         </div>
@@ -525,7 +541,7 @@ export default function ForecastNewPage() {
           <Button type="button" variant="outline" size="sm" onClick={() => router.push("/admin/forecasts")}>
             Close
           </Button>
-          <Button type="button" size="sm" onClick={handleSubmit}>
+          <Button type="button" size="sm" loading={saving} disabled={saving} onClick={handleSubmit}>
             Save forecast
           </Button>
         </div>
