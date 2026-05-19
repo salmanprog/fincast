@@ -14,6 +14,7 @@ import {
   type ForecastYearRow,
 } from "@/lib/forecastCalculator";
 import { validateForecastFormPayload } from "@/lib/forecastSaveValidation";
+import { useUser } from "@/context/UserContext";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -35,6 +36,7 @@ type PurchaseRow = {
 };
 
 type FormDataState = {
+  title: string;
   forecastYears: string;
   beginningBalance: string;
   totalRealEstateValue: string;
@@ -53,6 +55,7 @@ type FormDataState = {
 };
 
 export type ForecastSavePayload = {
+  title?: string | null;
   forecastYears: number;
   beginningBalance: number;
   totalRealEstateValue: number;
@@ -82,6 +85,7 @@ export type ForecastSavePayload = {
 };
 
 const initialFormData = (): FormDataState => ({
+  title: "",
   forecastYears: "30",
   beginningBalance: "",
   totalRealEstateValue: "",
@@ -111,7 +115,9 @@ const initialFormData = (): FormDataState => ({
 });
 
 function buildForecastPayload(formData: FormDataState): ForecastSavePayload {
+  const trimmedTitle = formData.title.trim();
   return {
+    title: trimmedTitle !== "" ? trimmedTitle : null,
     forecastYears: toNumber(formData.forecastYears),
     beginningBalance: toNumber(formData.beginningBalance),
     totalRealEstateValue: toNumber(formData.totalRealEstateValue),
@@ -168,6 +174,7 @@ function collectTrimRequiredErrors(formData: FormDataState): string[] {
 
 export default function ForecastNewPage() {
   const router = useRouter();
+  const { user, loading: loadingUser, refreshUser } = useUser();
   const [formData, setFormData] = useState<FormDataState>(initialFormData);
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<"beginningBalance" | "forecastYears", string>>>({});
@@ -177,6 +184,15 @@ export default function ForecastNewPage() {
   useEffect(() => {
     document.title = "Admin | New forecast";
   }, []);
+
+  const isAdminReporter =
+    user?.userType === "ADMIN" ||
+    user?.role?.slug === "admin" ||
+    user?.role?.isSuperAdmin === true;
+
+  const userCredits = user?.credits ?? 0;
+  const canCreateForecast = isAdminReporter || userCredits > 0;
+  const creditsBlocked = !loadingUser && !canCreateForecast;
 
   const handleChange = (key: keyof Omit<FormDataState, "source1" | "source2" | "purchases">, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -206,6 +222,14 @@ export default function ForecastNewPage() {
 
   const handleSubmit = async () => {
     setSubmitErrors([]);
+
+    if (!loadingUser && !canCreateForecast) {
+      setSubmitErrors([
+        "You need to purchase a plan before creating a forecast. You have 0 credits.",
+      ]);
+      return;
+    }
+
     const nextField: Partial<Record<"beginningBalance" | "forecastYears", string>> = {};
 
     if (formData.beginningBalance.trim() === "") {
@@ -267,10 +291,15 @@ export default function ForecastNewPage() {
 
       if (!res.ok || !data.success || !data.forecastId) {
         const msg = data.message || `Save failed (${res.status})`;
-        window.alert(msg);
+        if (res.status === 402) {
+          setSubmitErrors([msg]);
+        } else {
+          window.alert(msg);
+        }
         return;
       }
 
+      await refreshUser();
       router.push("/admin/forecasts");
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Network error while saving forecast.");
@@ -302,11 +331,37 @@ export default function ForecastNewPage() {
           <Button type="button" variant="outline" size="sm" onClick={() => router.push("/admin/forecasts")}>
             Cancel
           </Button>
-          <Button type="button" size="sm" loading={saving} disabled={saving} onClick={handleSubmit}>
+          <Button
+            type="button"
+            size="sm"
+            loading={saving}
+            disabled={saving || creditsBlocked}
+            onClick={handleSubmit}
+          >
             Save forecast
           </Button>
         </div>
       </div>
+
+      {creditsBlocked ? (
+        <div
+          className="rounded-xl border border-rose-200/90 bg-rose-50/90 px-4 py-3 text-sm text-rose-950 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-100"
+          role="alert"
+        >
+          <p className="font-semibold text-rose-950 dark:text-rose-100">You have 0 credits</p>
+          <p className="mt-1.5 leading-relaxed text-rose-900/95 dark:text-rose-200/90">
+            You need to purchase a plan before creating a forecast.
+          </p>
+          <p className="mt-3">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center rounded-lg bg-brand-950 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brand-900 dark:bg-brand-600 dark:hover:bg-brand-500"
+            >
+              View plans
+            </Link>
+          </p>
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] lg:p-6">
         <h3 className="mb-5 text-lg font-semibold text-gray-800 dark:text-white/90 lg:mb-7">
@@ -330,6 +385,16 @@ export default function ForecastNewPage() {
         <div className="space-y-6">
           <FormSection title="Starting Values" showDivider={false}>
             <FieldGrid>
+              <div className="md:col-span-2">
+                <Label htmlFor="forecast-title">Forecast title</Label>
+                <Input
+                  id="forecast-title"
+                  type="text"
+                  placeholder="e.g. Retirement plan 2026"
+                  value={formData.title}
+                  onChange={(e) => handleChange("title", e.target.value)}
+                />
+              </div>
               <div>
                 <Label htmlFor="beginning-balance">Beginning balance</Label>
                 <Input
@@ -366,7 +431,7 @@ export default function ForecastNewPage() {
                   onChange={(e) => handleChange("retirementAge", e.target.value)}
                 />
               </div>
-              <div>
+              <div style={{ display: "none" }}>
                 <Label htmlFor="forecast-years">Forecast years</Label>
                 <Input
                   id="forecast-years"
@@ -401,7 +466,7 @@ export default function ForecastNewPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="income-growth-rate">Income growth rate (%)</Label>
+                <Label htmlFor="income-growth-rate">Income appreciation rate</Label>
                 <Input
                   id="income-growth-rate"
                   type="number"
@@ -541,7 +606,13 @@ export default function ForecastNewPage() {
           <Button type="button" variant="outline" size="sm" onClick={() => router.push("/admin/forecasts")}>
             Close
           </Button>
-          <Button type="button" size="sm" loading={saving} disabled={saving} onClick={handleSubmit}>
+          <Button
+            type="button"
+            size="sm"
+            loading={saving}
+            disabled={saving || creditsBlocked}
+            onClick={handleSubmit}
+          >
             Save forecast
           </Button>
         </div>

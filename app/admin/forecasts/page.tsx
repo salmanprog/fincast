@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, FileDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -262,6 +262,15 @@ export default function ForecastsPage() {
                         >
                           <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />
                           View
+                        </Link>
+                        <Link
+                          href={`/admin/forecasts/${r.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                        >
+                          <FileDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          View PDF
                         </Link>
                       </div>
                     </TableCell>
