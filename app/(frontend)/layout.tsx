@@ -10,7 +10,8 @@ export default function FrontendLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
-  const showFooter = !pathname.startsWith("/demo");
+  const showFooter =
+    !pathname.startsWith("/demo") && !pathname.startsWith("/fincast-self-demo");
 
   return (
     <div className="min-h-screen bg-[#f4f7fb] antialiased">
