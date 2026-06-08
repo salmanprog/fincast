@@ -1,36 +1,83 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Playfair_Display } from "next/font/google";
 import {
   ArrowRight,
   Calendar,
   Check,
   Lock,
+  RotateCcw,
   Send,
   TrendingDown,
   TriangleAlert,
 } from "lucide-react";
 
-import { useCurrentUser } from "@/utils/currentUser";
+import {
+  calculateForecast,
+  toNumber,
+  type ForecastInput,
+} from "@/lib/forecastCalculator";
 
-const DEMO_GUEST_USED_KEY = "fincast_demo_guest_used";
+type TermSourceRow = {
+  amountPerYear: string;
+  beginningYear: string;
+  endingYear: string;
+};
 
-type InputState = {
-  clientAge: number;
-  retirementAge: number;
-  planningAge: number;
-  currentPortfolio: number;
-  annualSpending: number;
-  annualIncome: number;
-  returnAssumption: number;
-  spendingInflation: number;
+type PurchaseRow = {
+  description: string;
+  year: string;
+  amount: string;
+};
+
+/** Same fields as app/admin/forecasts/new/page.tsx */
+type DemoFormState = {
+  title: string;
+  forecastYears: string;
+  beginningBalance: string;
+  totalRealEstateValue: string;
+  annualLastingFunds: string;
+  recurringExpensesPerYear: string;
+  retirementAge: string;
+  returnOnInvestmentRate: string;
+  costOfLivingInflationRate: string;
+  incomeGrowthRate: string;
+  realEstateAppreciationRate: string;
+  withdrawalTaxRate: string;
+  source1: TermSourceRow;
+  source2: TermSourceRow;
+  recurringExpensesNotes: string;
+  purchases: [PurchaseRow, PurchaseRow];
 };
 
 type SimulationPoint = { age: number; assets: number };
 type AdjustmentKey = "spendDown" | "returnUp" | "delayRetirement";
 type FlowPhase = "assumptions" | "outlook";
+
+type ClientTextField = {
+  path: string;
+  label: string;
+  money?: boolean;
+};
+
+type ClientSliderField = {
+  path: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  kind: "percent" | "money";
+  format: (value: number) => string;
+};
+
+const CLIENT_TEXT_FIELDS: ClientTextField[] = [
+  { path: "totalRealEstateValue", label: "Total value of real estate", money: true },
+  { path: "beginningBalance", label: "Beginning balance", money: true },
+  { path: "annualLastingFunds", label: "Sources of Lasting Funds", money: true },
+  { path: "recurringExpensesPerYear", label: "Recurring living expenses annual", money: true },
+  { path: "retirementAge", label: "Retirement age" },
+];
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -38,22 +85,158 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
-const DEFAULT_INPUTS: InputState = {
-  clientAge: 65,
-  retirementAge: 65,
-  planningAge: 95,
-  currentPortfolio: 1_200_000,
-  annualSpending: 85_000,
-  annualIncome: 35_000,
-  returnAssumption: 6,
-  spendingInflation: 2.5,
-};
+const initialDemoForm = (): DemoFormState => ({
+  title: "Demo forecast",
+  forecastYears: "10",
+  beginningBalance: "100000",
+  totalRealEstateValue: "50000",
+  annualLastingFunds: "0",
+  recurringExpensesPerYear: "60000",
+  retirementAge: "65",
+  returnOnInvestmentRate: "5.5",
+  costOfLivingInflationRate: "3",
+  incomeGrowthRate: "2",
+  realEstateAppreciationRate: "10",
+  withdrawalTaxRate: "6",
+  source1: { amountPerYear: "", beginningYear: "", endingYear: "" },
+  source2: { amountPerYear: "", beginningYear: "", endingYear: "" },
+  recurringExpensesNotes: "",
+  purchases: [
+    { description: "", year: "", amount: "" },
+    { description: "", year: "", amount: "" },
+  ],
+});
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
 });
+
+function clientSliderFields(): ClientSliderField[] {
+  return [
+    {
+      path: "realEstateAppreciationRate",
+      label: "Real estate appreciation rate",
+      min: 0,
+      max: 8,
+      step: 0.1,
+      kind: "percent",
+      format: (n) => `${Number.isInteger(n) ? n : n.toFixed(1)}%`,
+    },
+    {
+      path: "returnOnInvestmentRate",
+      label: "Return on Investment",
+      min: 0,
+      max: 12,
+      step: 0.1,
+      kind: "percent",
+      format: (n) => `${Number.isInteger(n) ? n : n.toFixed(1)}%`,
+    },
+    {
+      path: "incomeGrowthRate",
+      label: "income appreciation rate",
+      min: 0,
+      max: 12,
+      step: 0.1,
+      kind: "percent",
+      format: (n) => `${Number.isInteger(n) ? n : n.toFixed(1)}%`,
+    },
+    {
+      path: "costOfLivingInflationRate",
+      label: "Cost of living inflation rate",
+      min: 0,
+      max: 8,
+      step: 0.1,
+      kind: "percent",
+      format: (n) => `${Number.isInteger(n) ? n : n.toFixed(1)}%`,
+    },
+    {
+      path: "withdrawalTaxRate",
+      label: "Withdrawal tax rate",
+      min: 0,
+      max: 100,
+      step: 0.1,
+      kind: "percent",
+      format: (n) => `${Number.isInteger(n) ? n : n.toFixed(1)}%`,
+    },
+  ];
+}
+
+function DemoClientInputRow({
+  label,
+  value,
+  money: moneyPrefix,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  money?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid grid-cols-[1fr_9.5rem] items-center gap-3">
+      <span className="text-sm font-medium text-slate-800">{label}</span>
+      <div className="relative">
+        {moneyPrefix ? (
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+            $
+          </span>
+        ) : null}
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`h-10 w-full rounded-xl border border-gray-200 bg-white text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 ${
+            moneyPrefix ? "pl-7 pr-3 text-right" : "px-3 text-center"
+          }`}
+        />
+      </div>
+    </label>
+  );
+}
+
+function DemoClientSlider({
+  label,
+  valueLabel,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string;
+  valueLabel: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+
+  return (
+    <div>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-slate-800">{label}</span>
+        <span className="text-sm font-bold text-slate-900">{valueLabel}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full outline-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-slate-900 [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-slate-900"
+        style={{
+          background: `linear-gradient(to right, rgb(15 23 42) 0%, rgb(15 23 42) ${pct}%, rgb(226 232 240) ${pct}%, rgb(226 232 240) 100%)`,
+        }}
+      />
+    </div>
+  );
+}
 const moneyK = (n: number) =>
   `$${Math.round(n / 1000)}k`;
 
@@ -67,28 +250,105 @@ function clampFloat(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function projectScenario(input: InputState): {
+function buildForecastInput(form: DemoFormState): ForecastInput {
+  return {
+    forecastYears: toNumber(form.forecastYears) || 30,
+    beginningBalance: toNumber(form.beginningBalance),
+    totalRealEstateValue: toNumber(form.totalRealEstateValue),
+    annualLastingFunds: toNumber(form.annualLastingFunds),
+    recurringExpensesPerYear: toNumber(form.recurringExpensesPerYear),
+    retirementAge: toNumber(form.retirementAge),
+    returnOnInvestmentRate: toNumber(form.returnOnInvestmentRate),
+    costOfLivingInflationRate: toNumber(form.costOfLivingInflationRate),
+    incomeGrowthRate: toNumber(form.incomeGrowthRate),
+    realEstateAppreciationRate: toNumber(form.realEstateAppreciationRate),
+    withdrawalTaxRate: toNumber(form.withdrawalTaxRate),
+    source1: {
+      amountPerYear: toNumber(form.source1.amountPerYear),
+      beginningYear: toNumber(form.source1.beginningYear),
+      endingYear: toNumber(form.source1.endingYear),
+    },
+    source2: {
+      amountPerYear: toNumber(form.source2.amountPerYear),
+      beginningYear: toNumber(form.source2.beginningYear),
+      endingYear: toNumber(form.source2.endingYear),
+    },
+    recurringExpensesNotes: form.recurringExpensesNotes,
+    purchases: [
+      {
+        description: form.purchases[0].description,
+        year: toNumber(form.purchases[0].year),
+        amount: toNumber(form.purchases[0].amount),
+      },
+      {
+        description: form.purchases[1].description,
+        year: toNumber(form.purchases[1].year),
+        amount: toNumber(form.purchases[1].amount),
+      },
+    ],
+  };
+}
+
+function getPlanningEndAge(form: DemoFormState): number {
+  const years = Math.max(1, toNumber(form.forecastYears) || 30);
+  const retire = toNumber(form.retirementAge) || 65;
+  return retire + years - 1;
+}
+
+function runSimulation(form: DemoFormState): {
   points: SimulationPoint[];
   depletionAge: number | null;
 } {
-  const startAge = clampInt(input.clientAge, 40, 90);
-  const endAge = clampInt(input.planningAge, startAge + 1, 110);
-  const portfolio = Math.max(0, input.currentPortfolio);
-  const netSpend = Math.max(0, input.annualSpending - input.annualIncome);
-  const realReturn =
-    (1 + input.returnAssumption / 100) / (1 + input.spendingInflation / 100) - 1;
-
-  const points: SimulationPoint[] = [{ age: startAge, assets: portfolio }];
-  let assets = portfolio;
+  const rows = calculateForecast(buildForecastInput(form));
+  const points: SimulationPoint[] = rows.map((r) => ({
+    age: r.age,
+    assets: r.endingBalance,
+  }));
   let depletionAge: number | null = null;
-
-  for (let age = startAge + 1; age <= endAge; age += 1) {
-    assets = assets * (1 + realReturn) - netSpend;
-    if (assets <= 0 && depletionAge === null) depletionAge = age;
-    points.push({ age, assets: Math.max(0, assets) });
+  for (const row of rows) {
+    if (row.endingBalance <= 0 && depletionAge === null) {
+      depletionAge = row.age;
+    }
   }
-
   return { points, depletionAge };
+}
+
+function getFormValue(form: DemoFormState, path: string): string {
+  if (path.startsWith("source1.")) {
+    const k = path.split(".")[1] as keyof TermSourceRow;
+    return form.source1[k];
+  }
+  if (path.startsWith("source2.")) {
+    const k = path.split(".")[1] as keyof TermSourceRow;
+    return form.source2[k];
+  }
+  const purchaseMatch = path.match(/^purchases\.(\d+)\.(\w+)$/);
+  if (purchaseMatch) {
+    const idx = Number(purchaseMatch[1]) as 0 | 1;
+    const k = purchaseMatch[2] as keyof PurchaseRow;
+    return form.purchases[idx][k];
+  }
+  return form[path as keyof DemoFormState] as string;
+}
+
+function setFormValue(form: DemoFormState, path: string, value: string): DemoFormState {
+  if (path.startsWith("source1.")) {
+    const k = path.split(".")[1] as keyof TermSourceRow;
+    return { ...form, source1: { ...form.source1, [k]: value } };
+  }
+  if (path.startsWith("source2.")) {
+    const k = path.split(".")[1] as keyof TermSourceRow;
+    return { ...form, source2: { ...form.source2, [k]: value } };
+  }
+  const purchaseMatch = path.match(/^purchases\.(\d+)\.(\w+)$/);
+  if (purchaseMatch) {
+    const idx = Number(purchaseMatch[1]) as 0 | 1;
+    const k = purchaseMatch[2] as keyof PurchaseRow;
+    const purchases = [...form.purchases] as [PurchaseRow, PurchaseRow];
+    purchases[idx] = { ...purchases[idx], [k]: value };
+    return { ...form, purchases };
+  }
+  return { ...form, [path]: value };
 }
 
 function pathFromPoints(points: SimulationPoint[], width: number, height: number): string {
@@ -141,7 +401,7 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Industry-style line draw (SVG stroke-dash trick); remount with animKey to replay */
+/** Industry-style line draw (SVG stroke-dash trick); remount with animKeys to replay */
 function AnimatedStrokePath({
   d,
   stroke,
@@ -184,34 +444,16 @@ function AnimatedStrokePath({
   );
 }
 
-function serializeInputs(s: InputState): string {
+function serializeInputs(s: DemoFormState): string {
   return JSON.stringify(s);
 }
 
 export default function FincastDemoWizard() {
-  const { user, loadingUser } = useCurrentUser();
-  const [hasMounted, setHasMounted] = useState(false);
   const [phase, setPhase] = useState<FlowPhase>("assumptions");
-  const [inputs, setInputs] = useState<InputState>(DEFAULT_INPUTS);
-  const [committedInputs, setCommittedInputs] = useState<InputState>(DEFAULT_INPUTS);
+  const [inputs, setInputs] = useState<DemoFormState>(initialDemoForm);
+  const [committedInputs, setCommittedInputs] = useState<DemoFormState>(initialDemoForm);
   const [activeAdjustment, setActiveAdjustment] = useState<AdjustmentKey | null>(null);
   const [resultEmail, setResultEmail] = useState("");
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  const guestDemoConsumed =
-    hasMounted &&
-    typeof window !== "undefined" &&
-    localStorage.getItem(DEMO_GUEST_USED_KEY) === "1";
-  const guestDemoBlocked =
-    hasMounted && !loadingUser && !user && guestDemoConsumed && phase === "assumptions";
-
-  const userCredits = user?.credits ?? 0;
-  const creditsBlocked =
-    hasMounted && !loadingUser && !!user && userCredits <= 0 && phase === "assumptions";
-  const demoUiBlocked = guestDemoBlocked || creditsBlocked;
 
   const assumptionsDirty = useMemo(
     () => serializeInputs(inputs) !== serializeInputs(committedInputs),
@@ -219,49 +461,54 @@ export default function FincastDemoWizard() {
   );
 
   const simulation = useMemo(
-    () => projectScenario(committedInputs),
+    () => runSimulation(committedInputs),
     [committedInputs]
   );
+  const planningEndAge = getPlanningEndAge(committedInputs);
+  const chartMinAge = simulation.points[0]?.age ?? toNumber(committedInputs.retirementAge);
+  const chartMaxAge =
+    simulation.points[simulation.points.length - 1]?.age ?? planningEndAge;
   const sustainable = simulation.depletionAge === null;
 
   const adjustedScenario = useMemo(() => {
     if (!activeAdjustment) return null;
     if (activeAdjustment === "spendDown") {
-      return projectScenario({
+      const expense = toNumber(committedInputs.recurringExpensesPerYear);
+      return runSimulation({
         ...committedInputs,
-        annualSpending: Math.round(committedInputs.annualSpending * 0.9),
+        recurringExpensesPerYear: String(Math.round(expense * 0.9)),
       });
     }
     if (activeAdjustment === "returnUp") {
-      return projectScenario({
+      const rate = clampFloat(toNumber(committedInputs.returnOnInvestmentRate) + 1, 0, 12);
+      return runSimulation({
         ...committedInputs,
-        returnAssumption: clampFloat(committedInputs.returnAssumption + 1, 0, 12),
+        returnOnInvestmentRate: String(rate),
       });
     }
-    return projectScenario({
+    const retire = clampInt(toNumber(committedInputs.retirementAge) + 2, 45, 90);
+    return runSimulation({
       ...committedInputs,
-      retirementAge: clampInt(committedInputs.retirementAge + 2, 45, 90),
-      clientAge: clampInt(committedInputs.clientAge, 40, 88),
+      retirementAge: String(retire),
     });
   }, [activeAdjustment, committedInputs]);
 
   const resultTitle = sustainable
-    ? `Assets Projected to Sustain Through Age ${committedInputs.planningAge}`
+    ? `Assets Projected to Sustain Through Age ${planningEndAge}`
     : `Assets May Be Insufficient at Age ${simulation.depletionAge}`;
 
   const resultBody = sustainable
     ? "Based on current assumptions, projected assets support planned spending across the modeled period."
     : "Based on current assumptions, projected assets may not sustain planned spending through the full retirement horizon.";
 
-  const spendReduction = Math.round(committedInputs.annualSpending * 0.1);
-  const reducedSpendSim = useMemo(
-    () =>
-      projectScenario({
-        ...committedInputs,
-        annualSpending: Math.max(0, Math.round(committedInputs.annualSpending * 0.9)),
-      }),
-    [committedInputs]
-  );
+  const spendReduction = Math.round(toNumber(committedInputs.recurringExpensesPerYear) * 0.1);
+  const reducedSpendSim = useMemo(() => {
+    const expense = toNumber(committedInputs.recurringExpensesPerYear);
+    return runSimulation({
+      ...committedInputs,
+      recurringExpensesPerYear: String(Math.max(0, Math.round(expense * 0.9))),
+    });
+  }, [committedInputs]);
   const runwayExtensionYears = (() => {
     if (simulation.depletionAge === null) return 0;
     if (reducedSpendSim.depletionAge === null) return 8;
@@ -273,10 +520,10 @@ export default function FincastDemoWizard() {
       return "Click an adjustment to test sensitivity in real time.";
     }
     if (adjustedScenario.depletionAge === null) {
-      return `With this adjustment, assets project to sustain through age ${committedInputs.planningAge}.`;
+      return `With this adjustment, assets project to sustain through age ${planningEndAge}.`;
     }
     return `With this adjustment, assets may be insufficient at age ${adjustedScenario.depletionAge}.`;
-  }, [activeAdjustment, adjustedScenario, committedInputs.planningAge]);
+  }, [activeAdjustment, adjustedScenario, planningEndAge]);
 
   const W = 560;
   const H = 200;
@@ -303,7 +550,7 @@ export default function FincastDemoWizard() {
   const yearsAfterRetire =
     simulation.depletionAge === null
       ? null
-      : simulation.depletionAge - committedInputs.retirementAge;
+      : simulation.depletionAge - toNumber(committedInputs.retirementAge);
 
   const assumptionsW = 520;
   const assumptionsH = 220;
@@ -315,24 +562,24 @@ export default function FincastDemoWizard() {
   const lastPointAssets = simulation.points[simulation.points.length - 1]?.assets ?? 0;
   const chartAnimKey = useMemo(
     () =>
-      `${committedInputs.currentPortfolio}-${committedInputs.annualSpending}-${committedInputs.planningAge}-${simulation.depletionAge ?? "ok"}-${simulation.points.length}-${Math.round(lastPointAssets)}`,
+      `${committedInputs.beginningBalance}-${committedInputs.recurringExpensesPerYear}-${planningEndAge}-${simulation.depletionAge ?? "ok"}-${simulation.points.length}-${Math.round(lastPointAssets)}`,
     [
-      committedInputs.currentPortfolio,
-      committedInputs.annualSpending,
-      committedInputs.planningAge,
+      committedInputs.beginningBalance,
+      committedInputs.recurringExpensesPerYear,
+      planningEndAge,
       simulation.depletionAge,
       simulation.points.length,
       lastPointAssets,
     ]
   );
 
-  const portfolioCount = useCountUp(committedInputs.currentPortfolio, 1200);
+  const portfolioCount = useCountUp(toNumber(committedInputs.beginningBalance), 1200);
   const depletionAgeCount = useCountUp(simulation.depletionAge ?? 0, 900);
-  const planningHorizonCount = useCountUp(committedInputs.planningAge, 850);
+  const planningHorizonCount = useCountUp(planningEndAge, 850);
   const yearsAfterRetireCount = useCountUp(yearsAfterRetire ?? 0, 750);
   const runwayYearsCount = useCountUp(runwayExtensionYears, 700);
-  const clientAgeLabelCount = useCountUp(committedInputs.clientAge, 550);
-  const planningAgeLabelCount = useCountUp(committedInputs.planningAge, 650);
+  const clientAgeLabelCount = useCountUp(chartMinAge, 550);
+  const planningAgeLabelCount = useCountUp(chartMaxAge, 650);
 
   const highRisk = !sustainable;
   const riskLabel = highRisk ? "High risk" : "Low risk";
@@ -340,31 +587,48 @@ export default function FincastDemoWizard() {
     ? "Significant shortfall ahead. Strategy changes are critical."
     : "Assumptions support the modeled period with remaining cushion.";
 
-  const updateField = (key: keyof InputState, value: number) => {
-    setInputs((prev) => ({
-      ...prev,
-      [key]:
-        key === "returnAssumption" || key === "spendingInflation"
-          ? clampFloat(value, 0, 20)
-          : clampInt(value, 0, 10_000_000),
-    }));
+  const handleAssumptionChange = (
+    path: string,
+    raw: string,
+    kind?: "percent" | "money" | "text"
+  ) => {
+    let stored = raw.replace(/,/g, "");
+    if (kind === "money") {
+      stored = String(Math.max(0, Math.round(parseNumber(stored))));
+    } else if (kind === "percent") {
+      stored = String(clampFloat(parseNumber(stored), 0, 100));
+    } else if (
+      path === "retirementAge" ||
+      path === "forecastYears" ||
+      path.endsWith("Year") ||
+      path.endsWith(".year")
+    ) {
+      stored = String(clampInt(parseNumber(stored), 0, 120));
+    }
+    setInputs((prev) => setFormValue(prev, path, stored));
+  };
+
+  const handleSliderChange = (path: string, value: number, kind: ClientSliderField["kind"]) => {
+    const stored =
+      kind === "money"
+        ? String(Math.max(0, Math.round(value)))
+        : String(clampFloat(value, 0, 100));
+    setInputs((prev) => setFormValue(prev, path, stored));
+  };
+
+  const resetClientInputs = () => {
+    const fresh = initialDemoForm();
+    setInputs(fresh);
+    setCommittedInputs(fresh);
+    setActiveAdjustment(null);
   };
 
   const goToOutlook = () => {
-    if (user && userCredits <= 0) {
-      return;
-    }
-    if (!user && typeof window !== "undefined" && localStorage.getItem(DEMO_GUEST_USED_KEY) === "1") {
-      return;
-    }
     if (assumptionsDirty) {
       setCommittedInputs({ ...inputs });
     }
     setActiveAdjustment(null);
     setPhase("outlook");
-    if (!user && typeof window !== "undefined") {
-      localStorage.setItem(DEMO_GUEST_USED_KEY, "1");
-    }
   };
 
   if (phase === "outlook") {
@@ -679,88 +943,53 @@ export default function FincastDemoWizard() {
         <p className="text-xs text-slate-500">Retirement Sustainability Analysis</p>
       </div>
 
-      {creditsBlocked ? (
-        <div
-          className="mb-4 rounded-xl border border-rose-200/90 bg-rose-50/90 px-4 py-3 text-sm text-rose-950 shadow-sm"
-          role="alert"
-        >
-          <p className="font-semibold text-rose-950">You have 0 credits</p>
-          <p className="mt-1.5 leading-relaxed text-rose-900/95">
-            Purchase a plan first to run forecasts with your account.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center rounded-lg bg-brand-950 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brand-900"
-            >
-              View plans
-            </Link>
-          </div>
-        </div>
-      ) : guestDemoBlocked ? (
-        <div
-          className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-sm"
-          role="alert"
-        >
-          <p className="font-semibold text-amber-950">You&apos;ve used your free guest demo</p>
-          <p className="mt-1.5 leading-relaxed text-amber-900/95">
-            For more forecasts, purchase a plan. If you already have an account, log in to continue.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center rounded-lg bg-brand-950 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brand-900"
-            >
-              View plans
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center rounded-lg border border-amber-300/80 bg-white px-3.5 py-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-100/80"
-            >
-              Log in
-            </Link>
-          </div>
-        </div>
-      ) : null}
-
       <section className="grid gap-4 xl:grid-cols-[35%_65%]">
-        <aside className="rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-blue-light-700">
-            Enter Assumptions
-          </h2>
+        <aside className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-slate-900">Client Inputs</h2>
+            <button
+              type="button"
+              onClick={resetClientInputs}
+              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Reset client inputs"
+            >
+              <RotateCcw className="h-5 w-5" />
+            </button>
+          </div>
 
-          <div className="grid gap-2">
-            {[
-              { key: "clientAge", label: "Client Age" },
-              { key: "retirementAge", label: "Retirement Age" },
-              { key: "planningAge", label: "Planning Age" },
-              { key: "currentPortfolio", label: "Current Portfolio" },
-              { key: "annualSpending", label: "Annual Spending" },
-              { key: "annualIncome", label: "Annual Income (SS/Pension)" },
-              { key: "returnAssumption", label: "Return Assumption %" },
-              { key: "spendingInflation", label: "Spending Inflation %" },
-            ].map((field, idx) => {
-              const key = field.key as keyof InputState;
-              const value = inputs[key];
-              const isPercent = key === "returnAssumption" || key === "spendingInflation";
-              const display = isPercent
-                ? String(value)
-                : Number(value).toLocaleString("en-US");
+          <div className="space-y-4">
+            {CLIENT_TEXT_FIELDS.map((field) => (
+              <DemoClientInputRow
+                key={field.path}
+                label={field.label}
+                money={field.money}
+                value={getFormValue(inputs, field.path)}
+                onChange={(value) =>
+                  handleAssumptionChange(
+                    field.path,
+                    value,
+                    field.money ? "money" : undefined
+                  )
+                }
+              />
+            ))}
+          </div>
+
+          <div className="mt-8 space-y-6 border-t border-gray-100 pt-6">
+            {clientSliderFields().map((field) => {
+              const raw = toNumber(getFormValue(inputs, field.path));
+              const value = clampFloat(raw, field.min, field.max);
               return (
-                <label key={field.key} className="grid grid-cols-[1fr_120px] items-center gap-2">
-                  <span className="text-xs font-medium text-slate-600">{field.label}</span>
-                  <input
-                    type="text"
-                    value={display}
-                    inputMode="decimal"
-                    readOnly={demoUiBlocked}
-                    onChange={(e) => updateField(key, parseNumber(e.target.value))}
-                    className={`h-9 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-sm font-semibold text-slate-900 outline-none ring-blue-300 transition focus:ring-2 ${
-                      demoUiBlocked ? "cursor-not-allowed bg-slate-100 opacity-80" : ""
-                    }`}
-                  />
-                  {idx === 3 ? <span className="col-span-2 my-1 h-px bg-slate-100" aria-hidden /> : null}
-                </label>
+                <DemoClientSlider
+                  key={field.path}
+                  label={field.label}
+                  valueLabel={field.format(value)}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  value={value}
+                  onChange={(next) => handleSliderChange(field.path, next, field.kind)}
+                />
               );
             })}
           </div>
@@ -768,13 +997,10 @@ export default function FincastDemoWizard() {
           <button
             type="button"
             onClick={goToOutlook}
-            disabled={demoUiBlocked}
             className={`mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-              demoUiBlocked
-                ? "cursor-not-allowed bg-slate-300 text-slate-500"
-                : assumptionsDirty
-                  ? "bg-brand-950 text-white hover:bg-brand-900"
-                  : "bg-slate-800 text-white hover:bg-slate-700"
+              assumptionsDirty
+                ? "bg-brand-950 text-white hover:bg-brand-900"
+                : "bg-slate-800 text-white hover:bg-slate-700"
             }`}
           >
             {assumptionsDirty ? "Calculate" : "Analysis"}
@@ -847,14 +1073,14 @@ export default function FincastDemoWizard() {
                 <>
                   <line
                     x1={
-                      ((depletionPoint.age - committedInputs.clientAge) /
-                        Math.max(1, committedInputs.planningAge - committedInputs.clientAge)) *
+                      ((depletionPoint.age - chartMinAge) /
+                        Math.max(1, chartMaxAge - chartMinAge)) *
                       520
                     }
                     y1="0"
                     x2={
-                      ((depletionPoint.age - committedInputs.clientAge) /
-                        Math.max(1, committedInputs.planningAge - committedInputs.clientAge)) *
+                      ((depletionPoint.age - chartMinAge) /
+                        Math.max(1, chartMaxAge - chartMinAge)) *
                       520
                     }
                     y2="220"
@@ -863,8 +1089,8 @@ export default function FincastDemoWizard() {
                   />
                   <circle
                     cx={
-                      ((depletionPoint.age - committedInputs.clientAge) /
-                        Math.max(1, committedInputs.planningAge - committedInputs.clientAge)) *
+                      ((depletionPoint.age - chartMinAge) /
+                        Math.max(1, chartMaxAge - chartMinAge)) *
                       520
                     }
                     cy="210"
@@ -885,42 +1111,33 @@ export default function FincastDemoWizard() {
             <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={demoUiBlocked}
                 onClick={() => setActiveAdjustment("spendDown")}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                  demoUiBlocked
-                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
-                    : activeAdjustment === "spendDown"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  activeAdjustment === "spendDown"
+                    ? "bg-brand-600 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 Reduce Spending 10%
               </button>
               <button
                 type="button"
-                disabled={demoUiBlocked}
                 onClick={() => setActiveAdjustment("returnUp")}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                  demoUiBlocked
-                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
-                    : activeAdjustment === "returnUp"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  activeAdjustment === "returnUp"
+                    ? "bg-brand-600 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 Increase Return to 7%
               </button>
               <button
                 type="button"
-                disabled={demoUiBlocked}
                 onClick={() => setActiveAdjustment("delayRetirement")}
                 className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                  demoUiBlocked
-                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
-                    : activeAdjustment === "delayRetirement"
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                  activeAdjustment === "delayRetirement"
+                    ? "bg-brand-600 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 Delay Retirement 2 Years
@@ -957,12 +1174,7 @@ export default function FincastDemoWizard() {
             <button
               type="button"
               onClick={goToOutlook}
-              disabled={demoUiBlocked}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                demoUiBlocked
-                  ? "cursor-not-allowed bg-slate-500 text-slate-200"
-                  : "bg-brand-500 text-white hover:bg-brand-400"
-              }`}
+              className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-400"
             >
               View full outlook
             </button>

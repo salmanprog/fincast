@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { AlertTriangle, Calendar, TrendingDown, ShieldCheck, RefreshCw, MousePointer2 } from "lucide-react";
+import Link from "next/link";
 
 export default function FinCastSelfDemo() {
   const [demoStep, setDemoStep] = useState(0);
@@ -15,7 +16,7 @@ export default function FinCastSelfDemo() {
   const narrationSteps = [
     {
       title: "The Hook",
-      voice: "Will your client run out of money? FinCast helps advisors transform a difficult retirement discussion into a calm, clear visual conversation in under sixty seconds.",
+      voice: "Will your client runs out of money? FinCast helps advisors transform a difficult retirement discussion into a calm, clear visual conversation in under sixty seconds.",
     },
     {
       title: "Client Inputs",
@@ -89,6 +90,16 @@ export default function FinCastSelfDemo() {
   const [retirementSpending, setRetirementSpending] = useState(95000);
   const [inflation, setInflation] = useState(3);
 
+  const resetInputs = () => {
+    setAgeNow(58);
+    setRetireAge(67);
+    setCurrentSavings(850000);
+    setAnnualSavings(35000);
+    setAnnualReturn(6);
+    setRetirementSpending(95000);
+    setInflation(3);
+  };
+
   const projection = useMemo(() => {
     const rows = [];
     let balance = Number(currentSavings || 0);
@@ -142,7 +153,7 @@ export default function FinCastSelfDemo() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950 p-4 md:p-8 relative overflow-hidden">
+    <div className="relative overflow-hidden px-4 py-8 text-slate-950 md:px-6 md:py-10">
       <motion.div
         className="fixed z-50 text-slate-900"
         animate={pointerPositions[demoStep]}
@@ -268,7 +279,14 @@ export default function FinCastSelfDemo() {
             <CardContent className="p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-semibold">Client Inputs</h2>
-                <RefreshCw className="w-5 h-5 text-slate-500" />
+                <button
+                  type="button"
+                  onClick={resetInputs}
+                  className="text-slate-500 transition hover:text-slate-800"
+                  aria-label="Reset inputs"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
               </div>
 
               <InputRow label="Current age" value={ageNow} setValue={setAgeNow} />
@@ -317,9 +335,12 @@ export default function FinCastSelfDemo() {
                   <div className="text-2xl font-semibold">See how FinCast works in a client meeting.</div>
                   <p className="text-slate-300 mt-1">Book a 15-minute advisor walkthrough.</p>
                 </div>
-                <Button className="rounded-2xl px-6 py-6 text-base bg-white text-slate-950 hover:bg-slate-100">
-                  <Calendar className="w-4 h-4 mr-2" /> Book Walkthrough
-                </Button>
+                <Link
+                  href="/book-call"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-6 text-base font-medium text-slate-950 hover:bg-slate-100"
+                >
+                  <Calendar className="h-4 w-4" /> Book Walkthrough
+                </Link>
               </div>
             </CardContent>
           </Card>

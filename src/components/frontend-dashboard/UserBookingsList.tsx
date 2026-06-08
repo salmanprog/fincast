@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -9,20 +10,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import useApi from "@/utils/useApi";
-import { useUser } from "@/context/UserContext";
+import { useCurrentUser } from "@/utils/currentUser";
 
 type BookingRow = {
   id: string;
-  userId: number;
   name: string;
   email: string;
   phone: string | null;
   date: string;
   time: string;
-  message: string | null;
   googleEventId: string | null;
   createdAt: string;
-  user?: { id: number; name: string | null; email: string | null } | null;
 };
 
 function formatDateOnly(iso: string) {
@@ -53,7 +51,6 @@ function formatScheduleDate(date: string, time: string) {
   }
 }
 
-/** Opens the event in Google Calendar (eid = base64url of `{eventId} {calendarEmail}`). */
 function googleCalendarEventUrl(eventId: string, calendarEmail: string): string {
   const raw = `${eventId} ${calendarEmail}`;
   const eid = btoa(raw)
@@ -63,8 +60,8 @@ function googleCalendarEventUrl(eventId: string, calendarEmail: string): string 
   return `https://www.google.com/calendar/event?eid=${encodeURIComponent(eid)}`;
 }
 
-export default function AdminBookingsPage() {
-  const { user } = useUser();
+export default function UserBookingsList() {
+  const { user } = useCurrentUser();
   const [rows, setRows] = useState<BookingRow[]>([]);
   const { data, loading, fetchApi } = useApi({
     url: "/api/bookings",
@@ -73,19 +70,10 @@ export default function AdminBookingsPage() {
     requiresAuth: true,
   });
 
-  const isAdminReporter =
-    user?.userType === "ADMIN" ||
-    user?.role?.slug === "admin" ||
-    user?.role?.isSuperAdmin === true;
-
   useEffect(() => {
-    document.title = "Admin | Bookings";
-  }, []);
-
-  useEffect(() => {
-    void fetchApi();
+    if (user) void fetchApi();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (data && Array.isArray(data)) {
@@ -93,61 +81,42 @@ export default function AdminBookingsPage() {
     }
   }, [data]);
 
-  const colCount = isAdminReporter ? 7 : 6;
-
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-gray-800 dark:bg-white/[0.03] sm:px-6">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
-          {isAdminReporter ? "All bookings" : "My bookings"}
-        </h3>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {isAdminReporter
-            ? "Every advisor call scheduled through the Book Call flow."
-            : "Calls you have scheduled through the Book Call flow."}
-        </p>
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+            My bookings
+          </h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Calls you have scheduled through the Book Call flow.
+          </p>
+        </div>
+        <Link
+          href="/book-call"
+          className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
+        >
+          Book a call
+        </Link>
       </div>
 
       <div className="max-w-full overflow-x-auto">
         <Table>
           <TableHeader className="border-y border-gray-100 dark:border-gray-800">
             <TableRow>
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
+              <TableCell isHeader className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                 Guest
               </TableCell>
-              {isAdminReporter ? (
-                <TableCell
-                  isHeader
-                  className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-                >
-                  Account
-                </TableCell>
-              ) : null}
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
+              <TableCell isHeader className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                 Phone
               </TableCell>
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
+              <TableCell isHeader className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                 Scheduled for
               </TableCell>
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
+              <TableCell isHeader className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                 Google event
               </TableCell>
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
+              <TableCell isHeader className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400">
                 Booked on
               </TableCell>
             </TableRow>
@@ -156,7 +125,7 @@ export default function AdminBookingsPage() {
           <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
             {loading ? (
               <TableRow>
-                <TableCell className="py-8 text-center text-gray-500" colSpan={colCount}>
+                <TableCell colSpan={5} className="py-8 text-center text-gray-500">
                   Loading…
                 </TableCell>
               </TableRow>
@@ -167,14 +136,6 @@ export default function AdminBookingsPage() {
                     <div className="font-medium text-gray-800 dark:text-white/90">{r.name}</div>
                     <div className="text-xs text-gray-500">{r.email}</div>
                   </TableCell>
-                  {isAdminReporter ? (
-                    <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
-                      <div className="font-medium text-gray-800 dark:text-white/90">
-                        {r.user?.name || "—"}
-                      </div>
-                      <div className="text-xs text-gray-500">{r.user?.email || "—"}</div>
-                    </TableCell>
-                  ) : null}
                   <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
                     {r.phone || "—"}
                   </TableCell>
@@ -184,14 +145,10 @@ export default function AdminBookingsPage() {
                   <TableCell className="py-3 font-mono text-xs text-gray-600 dark:text-gray-400">
                     {r.googleEventId ? (
                       <a
-                        href={googleCalendarEventUrl(
-                          r.googleEventId,
-                          r.email || r.user?.email || ""
-                        )}
+                        href={googleCalendarEventUrl(r.googleEventId, r.email)}
                         target="_blank"
                         rel="noreferrer"
                         className="text-brand-600 underline decoration-brand-600/30 underline-offset-2 hover:text-brand-700 dark:text-brand-400"
-                        title="Open in Google Calendar"
                       >
                         View Event
                       </a>
@@ -206,7 +163,7 @@ export default function AdminBookingsPage() {
               ))
             ) : (
               <TableRow>
-                <TableCell className="py-8 text-center text-gray-500" colSpan={colCount}>
+                <TableCell colSpan={5} className="py-8 text-center text-gray-500">
                   No bookings found.
                 </TableCell>
               </TableRow>

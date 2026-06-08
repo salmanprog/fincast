@@ -6,7 +6,9 @@ import useApi from "@/utils/useApi";
 
 export const EcommerceMetrics = () => {
   const [totalUsers, setTotalUsers] = useState<number>(0);
-  const [totalEvents, setTotalEvents] = useState<number>(0);
+  const [totalForecasts, setTotalForecasts] = useState<number>(0);
+  const [totalEarnings, setTotalEarnings] = useState<number>(0);
+  const [totalBookings, setTotalBookings] = useState<number>(0);
 
   // Fetch users
   const { data: usersData, fetchApi: fetchUsers } = useApi({
@@ -16,9 +18,22 @@ export const EcommerceMetrics = () => {
     requiresAuth: true,
   });
 
-  // Fetch events
-  const { data: eventsData, fetchApi: fetchEvents } = useApi({
-    url: "/api/admin/events",
+  const { data: forecastsData, fetchApi: fetchForecasts } = useApi({
+    url: "/api/forecasts",
+    method: "GET",
+    type: "manual",
+    requiresAuth: true,
+  });
+
+  const { data: purchasePlansData, fetchApi: fetchPurchasePlans } = useApi({
+    url: "/api/admin/user-purchase-plans",
+    method: "GET",
+    type: "manual",
+    requiresAuth: true,
+  });
+
+  const { data: bookingsData, fetchApi: fetchBookings } = useApi({
+    url: "/api/bookings",
     method: "GET",
     type: "manual",
     requiresAuth: true,
@@ -26,7 +41,9 @@ export const EcommerceMetrics = () => {
 
   useEffect(() => {
     fetchUsers();
-    fetchEvents();
+    fetchForecasts();
+    fetchPurchasePlans();
+    fetchBookings();
   }, []);
 
   useEffect(() => {
@@ -36,10 +53,30 @@ export const EcommerceMetrics = () => {
   }, [usersData]);
 
   useEffect(() => {
-    if (eventsData && Array.isArray(eventsData)) {
-      setTotalEvents(eventsData.length);
+    if (forecastsData && Array.isArray(forecastsData)) {
+      setTotalForecasts(forecastsData.length);
     }
-  }, [eventsData]);
+  }, [forecastsData]);
+
+  useEffect(() => {
+    if (purchasePlansData && Array.isArray(purchasePlansData)) {
+      const total = purchasePlansData.reduce((sum, plan) => {
+        const transactions = plan.transactions ?? [];
+        const txTotal = transactions.reduce(
+          (txSum: number, tx: { amount: number }) => txSum + (tx.amount ?? 0),
+          0
+        );
+        return sum + txTotal;
+      }, 0);
+      setTotalEarnings(total);
+    }
+  }, [purchasePlansData]);
+
+  useEffect(() => {
+    if (bookingsData && Array.isArray(bookingsData)) {
+      setTotalBookings(bookingsData.length);
+    }
+  }, [bookingsData]);
 
   // Format number with commas
   const formatNumber = (num: number) => {
@@ -57,16 +94,12 @@ export const EcommerceMetrics = () => {
         <div className="flex items-end justify-between mt-5">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-            Forecasts run
+            Total users
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
               {formatNumber(totalUsers)}
             </h4>
           </div>
-          <Badge color="success">
-            <ArrowUpRightIcon className="text-success-500 size-6" />
-            11.01%
-          </Badge>
         </div>
       </div>
       {/* <!-- Metric Item End --> */}
@@ -79,17 +112,12 @@ export const EcommerceMetrics = () => {
         <div className="flex items-end justify-between mt-5">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-            Credit balance
+            Total Forecasts
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
-              {formatNumber(totalEvents)}
+              {formatNumber(totalForecasts)}
             </h4>
           </div>
-
-          <Badge color="error">
-            <ArrowUpRightIcon className="text-error-500 size-6" />
-            9.05%
-          </Badge>
         </div>
       </div>
       {/* <!-- Metric Item Start --> */}
@@ -100,17 +128,12 @@ export const EcommerceMetrics = () => {
         <div className="flex items-end justify-between mt-5">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-            Lifetime spend
+            Total Earnings
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
-              {formatNumber(totalEvents)}
+              {formatNumber(totalEarnings)}
             </h4>
           </div>
-
-          <Badge color="error">
-            <ArrowUpRightIcon className="text-error-500 size-6" />
-            9.05%
-          </Badge>
         </div>
       </div>
       {/* <!-- Metric Item Start --> */}
@@ -121,17 +144,12 @@ export const EcommerceMetrics = () => {
         <div className="flex items-end justify-between mt-5">
           <div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-            Avg risk score
+            Total Bookings
             </span>
             <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
-              {formatNumber(totalEvents)}
+              {formatNumber(totalBookings)}
             </h4>
           </div>
-
-          <Badge color="error">
-            <ArrowUpRightIcon className="text-error-500 size-6" />
-            9.05%
-          </Badge>
         </div>
       </div>
       {/* <!-- Metric Item End --> */}

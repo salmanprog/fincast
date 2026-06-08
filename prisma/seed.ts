@@ -239,6 +239,13 @@ async function main() {
     sortOrder: sortOrder++,
   });
 
+  const userBookingsModule = await findOrCreateModule({
+    name: "User Bookings",
+    routeName: "/admin/user-bookings/",
+    icon: null,
+    sortOrder: 1,
+  });
+
   // Collect all modules for permission creation
   const superAdminModules = [
     dashboardModule,
@@ -262,7 +269,7 @@ async function main() {
     dashboardModule,
     forecastsModule,
     bookingsModule,
-    allBookingsModule,
+    userBookingsModule,
     planPurchasesModule,
   ];
 
@@ -306,7 +313,7 @@ async function main() {
     }
   }
 
-  console.log("✅ Seed completed successfully");
+  console.log("Seed completed successfully");
 }
 
 main()

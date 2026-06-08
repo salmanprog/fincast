@@ -24,13 +24,8 @@ export default function Ecommerce() {
         </div>
       </div>
       <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1">
-          <RecentOrders />
-        </div>
 
-
-
-        <div className="">
+        <div className="w-full">
           <DemographicCard />
         </div>
       </div>
