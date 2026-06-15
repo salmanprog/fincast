@@ -17,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${roboto.variable} dark:bg-gray-900`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${roboto.variable} dark:bg-gray-900`} suppressHydrationWarning>
         <ThemeProvider>
           <SidebarProvider>{children}</SidebarProvider>
         </ThemeProvider>

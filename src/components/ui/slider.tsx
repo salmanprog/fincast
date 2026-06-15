@@ -21,7 +21,7 @@ export function Slider({ value, min, max, step = 1, onValueChange, className }: 
       step={step}
       value={value[0]}
       onChange={(e) => onValueChange([Number(e.target.value)])}
-      className={cn("w-full accent-slate-900", className)}
+      className={cn("w-full accent-[#185FA5]", className)}
     />
   );
 }
