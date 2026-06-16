@@ -515,10 +515,30 @@ export default function FinCastSelfDemo() {
           printPortalRoot
         )}
 
+      <style jsx global>{`
+        @media print {
+          .fincast-demo-pointer {
+            display: none !important;
+          }
+          .fincast-demo-card {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .fincast-demo-result-card {
+            break-before: page;
+            page-break-before: always;
+            overflow: visible !important;
+          }
+          .fincast-demo-result-chart {
+            height: 30rem !important;
+          }
+        }
+      `}</style>
+
       {/* MAIN APP */}
       <div className="min-h-screen bg-slate-50 text-slate-950 p-4 md:p-8 relative overflow-hidden">
         <motion.div
-          className="fixed z-50 text-slate-900 pointer-events-none"
+          className="fincast-demo-pointer fixed z-50 text-slate-900 pointer-events-none"
           animate={{ top: pointerPos.top, left: pointerPos.left }}
           transition={{ duration: 0.9 }}
         >
@@ -539,7 +559,7 @@ export default function FinCastSelfDemo() {
             transition={{ duration: 0.5 }}
             className="grid lg:grid-cols-[0.77fr_1.23fr] gap-6 items-stretch"
           >
-            <Card ref={hookCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 0 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={hookCardRef} className={`fincast-demo-card rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 0 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-7 md:p-10 space-y-6">
                 <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">
                   <ShieldCheck className="w-4 h-4" /> FinCast Reva RIA Self-Demo
@@ -602,7 +622,7 @@ export default function FinCastSelfDemo() {
               </CardContent>
             </Card>
 
-            <Card ref={resultCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white overflow-hidden ${demoStep === 2 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={resultCardRef} className={`fincast-demo-card fincast-demo-result-card rounded-2xl shadow-sm border-slate-200 bg-white overflow-hidden ${demoStep === 2 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-6 md:p-8 space-y-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -617,7 +637,7 @@ export default function FinCastSelfDemo() {
                 </div>
 
                 {!hasRun ? (
-                  <div className="h-[48rem] w-full flex flex-col items-center justify-center gap-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50">
+                  <div className="fincast-demo-result-chart h-[48rem] w-full flex flex-col items-center justify-center gap-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50">
                     <TrendingUp className="w-12 h-12 text-slate-300" />
                     <div className="text-center">
                       <div className="text-base font-semibold text-slate-600">Ready to project</div>
@@ -628,7 +648,7 @@ export default function FinCastSelfDemo() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="h-[48rem] w-full relative">
+                  <div className="fincast-demo-result-chart h-[48rem] w-full relative">
                     {!animating && (
                       <button
                         onClick={() => handleRun()}
@@ -669,7 +689,7 @@ export default function FinCastSelfDemo() {
           </motion.div>
 
           <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-6 mb-6">
-            <Card ref={inputsCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 1 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={inputsCardRef} className={`fincast-demo-card rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 1 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-semibold">Client Inputs</h2>
@@ -716,7 +736,7 @@ export default function FinCastSelfDemo() {
               </CardContent>
             </Card>
 
-            <Card ref={scenariosCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 3 || demoStep === 4 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={scenariosCardRef} className={`fincast-demo-card rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 3 || demoStep === 4 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div>
                   <h2 className="text-2xl md:text-3xl font-semibold">Scenario Conversation</h2>
@@ -759,7 +779,7 @@ export default function FinCastSelfDemo() {
         </div>
 
         {/* ADVISOR MEETING SCRIPT */}
-        <div className="max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="fincast-demo-card max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <button
             onClick={() => setScriptOpen((v) => !v)}
             className="w-full flex items-center justify-between px-7 py-5 hover:bg-slate-50 transition"
@@ -792,7 +812,7 @@ export default function FinCastSelfDemo() {
               </div>
 
               {MEETING_SCRIPT.map((step, i) => (
-                <div key={i} className="grid md:grid-cols-[220px_1fr] gap-4">
+                <div key={i} className="fincast-demo-card grid md:grid-cols-[220px_1fr] gap-4">
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 mb-2">
                       Step {i + 1}
@@ -1141,7 +1161,7 @@ function ScenarioCard({ title, body, action }: { title: string; body: string; ac
   return (
     <button
       onClick={action}
-      className="text-left rounded-2xl border border-slate-200 p-5 hover:bg-slate-50 transition"
+      className="fincast-demo-card text-left rounded-2xl border border-slate-200 p-5 hover:bg-slate-50 transition"
     >
       <div className="font-semibold text-lg">{title}</div>
       <p className="text-sm text-slate-600 mt-2">{body}</p>
