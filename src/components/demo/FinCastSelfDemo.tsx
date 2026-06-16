@@ -643,7 +643,7 @@ export default function FinCastSelfDemo() {
                       <div className="text-base font-semibold text-slate-600">Ready to project</div>
                       <div className="text-sm text-slate-400 mt-1">Set your assumptions, then run</div>
                     </div>
-                    <Button onClick={() => handleRun()} size="lg" className="rounded-2xl px-8 gap-2">
+                    <Button onClick={() => handleRun()} className="rounded-2xl px-8 py-6 text-base gap-2">
                       <Play className="w-4 h-4" /> Run Projection
                     </Button>
                   </div>
