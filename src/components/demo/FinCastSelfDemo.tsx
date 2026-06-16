@@ -16,9 +16,43 @@ import {
   RefreshCw, MousePointer2, Printer, ChevronDown, ChevronUp, BookOpen, Play,
 } from "lucide-react";
 
+let cachedFemaleVoice: SpeechSynthesisVoice | null = null;
+
+/** Same voice picker the narration steps used originally — first matching voice in browser order. */
+function getPreferredFemaleVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
+  if (cachedFemaleVoice) return cachedFemaleVoice;
+
+  const voices = synth.getVoices();
+  if (!voices.length) return null;
+
+  const match =
+    voices.find(
+      (v) =>
+        v.name.includes("Serena") ||
+        v.name.includes("Samantha") ||
+        v.name.includes("Karen") ||
+        v.name.includes("Moira") ||
+        v.name.includes("Tessa") ||
+        v.name.includes("Google UK English Female") ||
+        v.name.includes("Google US English Female")
+    ) ?? null;
+
+  if (match) cachedFemaleVoice = match;
+  return match;
+}
+
+function applyPreferredFemaleVoice(
+  utterance: SpeechSynthesisUtterance,
+  synth: SpeechSynthesis = window.speechSynthesis
+) {
+  const voice = getPreferredFemaleVoice(synth);
+  if (voice) utterance.voice = voice;
+}
+
 export default function FinCastSelfDemo() {
   const [demoStep, setDemoStep] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+  const [narrationReplayKey, setNarrationReplayKey] = useState(0);
   const [scriptOpen, setScriptOpen] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [lineCounts, setLineCounts] = useState<[number, number, number, number]>([0, 0, 0, 0]);
@@ -26,6 +60,7 @@ export default function FinCastSelfDemo() {
   const lineCountsRef = useRef<[number, number, number, number]>([0, 0, 0, 0]);
   const currentLineRef = useRef(0);
   const mountedRef = useRef(false);
+  const [printPortalRoot, setPrintPortalRoot] = useState<HTMLElement | null>(null);
 
   const hookCardRef = useRef<HTMLDivElement | null>(null);
   const resultCardRef = useRef<HTMLDivElement | null>(null);
@@ -36,6 +71,7 @@ export default function FinCastSelfDemo() {
   const isAutoPlayingRef = useRef(false);
   useEffect(() => { isAutoPlayingRef.current = isAutoPlaying; }, [isAutoPlaying]);
   const spokenStepRef = useRef<number>(-1);
+  const [isPaused, setIsPaused] = useState(false);
 
   const narrationSteps = [
     {
@@ -61,23 +97,58 @@ export default function FinCastSelfDemo() {
   ];
 
   const nextStep = () => setDemoStep((s) => (s + 1) % narrationSteps.length);
+
+  const speakWithResume = (synth: SpeechSynthesis, utterance: SpeechSynthesisUtterance) => {
+    try { synth.resume(); } catch { /* ignore */ }
+    window.setTimeout(() => {
+      try { synth.resume(); } catch { /* ignore */ }
+      synth.speak(utterance);
+    }, 50);
+  };
+
   const startAutoDemo = () => {
     window?.speechSynthesis?.cancel?.();
     spokenStepRef.current = -1;
     setDemoStep(0);
+    setIsPaused(false);
     setIsAutoPlaying(true);
+    setNarrationReplayKey((k) => k + 1);
   };
-  const stopAutoDemo = () => {
+
+  const resumeAutoDemo = () => {
+    if (animTimerRef.current) clearInterval(animTimerRef.current);
     window?.speechSynthesis?.cancel?.();
+    spokenStepRef.current = -1;
+    setIsPaused(false);
+    setIsAutoPlaying(true);
+    setNarrationReplayKey((k) => k + 1);
+  };
+
+  const stopAutoDemo = () => {
+    if (animTimerRef.current) clearInterval(animTimerRef.current);
+    window?.speechSynthesis?.cancel?.();
+    setIsPaused(true);
     setIsAutoPlaying(false);
   };
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    const primeVoices = () => getPreferredFemaleVoice(synth);
+    primeVoices();
+    synth.addEventListener("voiceschanged", primeVoices);
+    return () => synth.removeEventListener("voiceschanged", primeVoices);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (!isAutoPlaying) return;
+
     // Avoid re-speaking the same step when only isAutoPlaying toggled
     if (spokenStepRef.current === demoStep) return;
     spokenStepRef.current = demoStep;
-    window.speechSynthesis.cancel();
+    const synth = window.speechSynthesis;
+    synth.cancel();
 
     const advance = () => {
       if (!isAutoPlayingRef.current) return;
@@ -95,6 +166,7 @@ export default function FinCastSelfDemo() {
 
     const endOfDemoPdfFlow = () => {
       setIsAutoPlaying(false);
+      setIsPaused(false);
       isAutoPlayingRef.current = false;
       const openPrint = () => {
         try {
@@ -111,17 +183,7 @@ export default function FinCastSelfDemo() {
         intro.rate = 0.72;
         intro.pitch = 0.96;
         intro.volume = 0.9;
-        const voices = synth.getVoices();
-        const preferred = voices.find((v) =>
-          v.name.includes("Serena") ||
-          v.name.includes("Samantha") ||
-          v.name.includes("Karen") ||
-          v.name.includes("Moira") ||
-          v.name.includes("Tessa") ||
-          v.name.includes("Google UK English Female") ||
-          v.name.includes("Google US English Female")
-        );
-        if (preferred) intro.voice = preferred;
+        applyPreferredFemaleVoice(intro, synth);
         let opened = false;
         const openOnce = () => {
           if (opened) return;
@@ -132,7 +194,7 @@ export default function FinCastSelfDemo() {
         intro.onerror = openOnce;
         setTimeout(() => {
           try { synth.resume(); } catch { /* ignore */ }
-          synth.speak(intro);
+          speakWithResume(synth, intro);
         }, 600);
         // Safety net in case onend never fires
         setTimeout(openOnce, 8000);
@@ -145,17 +207,7 @@ export default function FinCastSelfDemo() {
     utterance.rate = 0.68;
     utterance.pitch = 0.96;
     utterance.volume = 0.86;
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find((v) =>
-      v.name.includes("Serena") ||
-      v.name.includes("Samantha") ||
-      v.name.includes("Karen") ||
-      v.name.includes("Moira") ||
-      v.name.includes("Tessa") ||
-      v.name.includes("Google UK English Female") ||
-      v.name.includes("Google US English Female")
-    );
-    if (preferredVoice) utterance.voice = preferredVoice;
+    applyPreferredFemaleVoice(utterance);
 
     // Step 2 = "Instant Projection": skip the long narration and let the
     // per-scenario voice ("Base case", "Retire later", "Spend less",
@@ -166,8 +218,8 @@ export default function FinCastSelfDemo() {
     }
 
     utterance.onend = advance;
-    window.speechSynthesis.speak(utterance);
-  }, [demoStep, isAutoPlaying]);
+    speakWithResume(synth, utterance);
+  }, [demoStep, isAutoPlaying, narrationReplayKey]);
 
   const [clientName, setClientName] = useState("");
 
@@ -290,7 +342,8 @@ export default function FinCastSelfDemo() {
       utter.rate = 0.95;
       utter.pitch = 1;
       utter.volume = 1;
-      synth.speak(utter);
+      applyPreferredFemaleVoice(utter, synth);
+      speakWithResume(synth, utter);
     } catch { /* ignore */ }
   };
 
@@ -399,6 +452,10 @@ export default function FinCastSelfDemo() {
   };
 
   useEffect(() => {
+    setPrintPortalRoot(document.body);
+  }, []);
+
+  useEffect(() => {
     const updatePointer = () => {
       const targets: (HTMLElement | null)[] = [
         hookCardRef.current,
@@ -431,31 +488,32 @@ export default function FinCastSelfDemo() {
   return (
     <>
       {/* PRINT-ONLY ONE-PAGE SUMMARY (portal → body so print CSS can show it)*/}
-      {createPortal(
-        <div
-          id="fincast-print-summary"
-          style={{ display: "none" }}
-          aria-hidden="true"
-        >
-          <PrintSummary
-            clientName={clientName}
-            ageNow={ageNow}
-            retireAge={retireAge}
-            currentSavings={currentSavings}
-            annualContributions={annualContributions}
-            annualReturn={annualReturn}
-            retirementSpending={retirementSpending}
-            ssIncome={ssIncome}
-            otherRetirementIncome={otherRetirementIncome}
-            inflation={inflation}
-            projection={projection}
-            scenarioData={scenarioData}
-            resultMessage={resultMessage}
-            today={today}
-          />
-        </div>,
-        document.body
-      )}
+      {printPortalRoot &&
+        createPortal(
+          <div
+            id="fincast-print-summary"
+            style={{ display: "none" }}
+            aria-hidden="true"
+          >
+            <PrintSummary
+              clientName={clientName}
+              ageNow={ageNow}
+              retireAge={retireAge}
+              currentSavings={currentSavings}
+              annualContributions={annualContributions}
+              annualReturn={annualReturn}
+              retirementSpending={retirementSpending}
+              ssIncome={ssIncome}
+              otherRetirementIncome={otherRetirementIncome}
+              inflation={inflation}
+              projection={projection}
+              scenarioData={scenarioData}
+              resultMessage={resultMessage}
+              today={today}
+            />
+          </div>,
+          printPortalRoot
+        )}
 
       {/* MAIN APP */}
       <div className="min-h-screen bg-slate-50 text-slate-950 p-4 md:p-8 relative overflow-hidden">
@@ -520,9 +578,15 @@ export default function FinCastSelfDemo() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <Button onClick={startAutoDemo} className="rounded-2xl px-6 py-6 text-base">
-                    Start Auto Narrated Demo
-                  </Button>
+                  {isPaused ? (
+                    <Button onClick={resumeAutoDemo} className="rounded-2xl px-6 py-6 text-base">
+                      Resume Narrated Demo
+                    </Button>
+                  ) : (
+                    <Button onClick={startAutoDemo} className="rounded-2xl px-6 py-6 text-base">
+                      Start Auto Narrated Demo
+                    </Button>
+                  )}
                   <Button onClick={nextStep} variant="outline" className="rounded-2xl px-6 py-6 text-base">
                     Next Step
                   </Button>
