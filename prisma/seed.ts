@@ -232,6 +232,13 @@ async function main() {
     sortOrder: 1,
   });
 
+  const plansModule = await findOrCreateModule({
+    name: "Plans",
+    routeName: "/admin/plans/",
+    icon: "BoxCubeIcon",
+    sortOrder: sortOrder++,
+  });
+
   const planPurchasesModule = await findOrCreateModule({
     name: "Plan purchases",
     routeName: "/admin/user-purchase-plans/",
@@ -253,6 +260,7 @@ async function main() {
     allUsersModule,
     bookingsModule,
     allBookingsModule,
+    plansModule,
     planPurchasesModule,
   ];
 
@@ -262,6 +270,7 @@ async function main() {
     allUsersModule,
     bookingsModule,
     allBookingsModule,
+    plansModule,
     planPurchasesModule,
   ];
 

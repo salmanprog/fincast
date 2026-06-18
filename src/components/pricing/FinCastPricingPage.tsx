@@ -332,17 +332,6 @@ function FinCastPricingPageInner() {
           );
         })}
       </div>
-
-      <p className="mx-auto mt-6 text-center text-sm text-slate-600">
-        Need to talk to a human?{" "}
-        <a
-          href="#book"
-          className="font-semibold text-brand-600 hover:underline"
-        >
-          Book a strategist
-        </a>
-        .
-      </p>
     </div>
   );
 }

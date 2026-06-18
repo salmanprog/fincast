@@ -168,7 +168,7 @@ export default abstract class RestController<
           : {};
         const hookData = await this.getQueryHook("beforeCreate", {}, requestData);
         delete hookData.id;
-        const finalData = { ...data, ...hookData };
+        const finalData = { ...data, ...hookData, ...(this.data ?? {}) };
         const create = (await this.model.create?.({ data: finalData })) as TEntity;
         let query: Record<string, unknown> = {};
 
@@ -246,7 +246,10 @@ export default abstract class RestController<
     try {
       const beforeUpdate = await this.beforeUpdate();
       if (beforeUpdate) return beforeUpdate;
-      const record_updated = (await this.model.update?.({ where: { id }, data })) as TEntity;
+      const record_updated = (await this.model.update?.({
+        where: { id },
+        data: { ...data, ...(this.data ?? {}) },
+      })) as TEntity;
       let query: Record<string, unknown> = {};
 
         const requestDataShow: Record<string, unknown> = this.__request
@@ -334,7 +337,13 @@ export default abstract class RestController<
         const resource = new this.resource();
         if (Array.isArray(data) && typeof resource.collection === "function") {
           transformedData = await resource.collection(data as TEntity[]);
-        } else if (typeof resource.toArray === "function") {
+        } else if (
+          typeof resource.toArray === "function" &&
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          Object.keys(data as object).length > 0
+        ) {
           transformedData = await resource.toArray(data as TEntity);
         }
       }

@@ -36,6 +36,15 @@ function amountPaidDollars(session: Stripe.Checkout.Session, planAmount: number)
   return planAmount;
 }
 
+function stripePlanDescription(plan: {
+  credits: number;
+  description: string | null;
+}): string {
+  const creditsLabel = `${plan.credits} ${plan.credits === 1 ? "credit" : "credits"}`;
+  const detail = plan.description?.trim();
+  return detail ? `${creditsLabel} · ${detail}` : creditsLabel;
+}
+
 export default class CheckoutController extends Controller {
   constructor(req?: Request) {
     super(req as unknown as NextRequest);
@@ -66,17 +75,13 @@ export default class CheckoutController extends Controller {
       }
 
       const plan = body.plan === "pro" ? "pro" : "starter";
-      const priceId =
-        plan === "pro"
-          ? process.env.STRIPE_PRICE_ID_PRO
-          : process.env.STRIPE_PRICE_ID_STARTER;
 
-      if (!priceId) {
-        return this.sendError(
-          plan === "pro" ? "Missing STRIPE_PRICE_ID_PRO" : "Missing STRIPE_PRICE_ID_STARTER",
-          {},
-          503
-        );
+      const planRow = await prisma.plan.findFirst({
+        where: { slug: plan, deletedAt: null, status: true },
+      });
+
+      if (!planRow) {
+        return this.sendError(`Plan "${plan}" is not available`, {}, 404);
       }
 
       const stripe = new Stripe(secret);
@@ -84,7 +89,19 @@ export default class CheckoutController extends Controller {
 
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: "usd",
+              unit_amount: planRow.amount * 100,
+              product_data: {
+                name: `FinCast ${planRow.title}`,
+                description: stripePlanDescription(planRow),
+              },
+            },
+          },
+        ],
         success_url: `${base}/pricing?checkout=success`,
         cancel_url: `${base}/pricing?checkout=cancel`,
         client_reference_id: user.id,
