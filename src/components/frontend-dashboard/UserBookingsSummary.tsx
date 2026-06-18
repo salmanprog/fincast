@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { openCalendlyPopup } from "@/lib/calendly";
 import { Calendar, RedoIcon } from "lucide-react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
@@ -59,6 +60,14 @@ export default function UserBookingsSummary() {
   }, [user?.id]);
 
   useEffect(() => {
+    const refresh = () => {
+      if (user) void fetchApi();
+    };
+    window.addEventListener("fincast:booking-saved", refresh);
+    return () => window.removeEventListener("fincast:booking-saved", refresh);
+  }, [user, fetchApi]);
+
+  useEffect(() => {
     if (data && Array.isArray(data)) {
       setRows(data as BookingRow[]);
     }
@@ -114,12 +123,16 @@ export default function UserBookingsSummary() {
               </Link>
             </DropdownItem>
             <DropdownItem
-              onItemClick={() => setIsOpen(false)}
+              onItemClick={() => {
+                setIsOpen(false);
+                openCalendlyPopup(
+                  user ? { name: user.name, email: user.email } : undefined,
+                  "/dashboard"
+                );
+              }}
               className="flex w-full rounded-lg font-normal text-left text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
-              <Link href="/book-call" className="w-full">
-                Book a call
-              </Link>
+              Book a call
             </DropdownItem>
           </Dropdown>
         </div>

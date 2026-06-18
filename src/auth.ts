@@ -59,8 +59,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 30 * 24 * 60 * 60,
   },
   pages: {
-    signIn: "/book-call",
-    error: "/book-call",
+    signIn: "/login",
+    error: "/login",
   },
   callbacks: {
     async jwt({ token, account }) {

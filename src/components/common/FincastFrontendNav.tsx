@@ -10,7 +10,8 @@ import { TrendingUp, LogOut } from "lucide-react";
 
 import { useCurrentUser, clearCurrentUserCache } from "@/utils/currentUser";
 
-import { clearAuthToken } from "@/lib/authClient";
+import { clearAuthToken, getStoredAuthToken } from "@/lib/authClient";
+import { openCalendlyPopup } from "@/lib/calendly";
 
 
 
@@ -76,8 +77,6 @@ export default function FincastFrontendNav() {
 
   const { user, loadingUser } = useCurrentUser();
 
-
-
   const handleLogout = () => {
 
     clearAuthToken();
@@ -91,11 +90,19 @@ export default function FincastFrontendNav() {
 
 
   const handleBookCall = () => {
-    if (user) {
-      window.location.assign("/book-call");
+    if (!getStoredAuthToken()) {
+      const base = pathname || "/";
+      const separator = base.includes("?") ? "&" : "?";
+      window.location.assign(
+        `/login?returnUrl=${encodeURIComponent(`${base}${separator}bookCall=1`)}`
+      );
       return;
     }
-    window.location.assign(`/login?returnUrl=${encodeURIComponent("/book-call")}`);
+
+    openCalendlyPopup(
+      user ? { name: user.name, email: user.email } : undefined,
+      pathname || "/"
+    );
   };
 
 

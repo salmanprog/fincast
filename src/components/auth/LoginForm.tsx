@@ -20,14 +20,25 @@ export default function LoginForm() {
     setFieldErrors({});
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.set("email", email.trim());
-      formData.set("password", password);
-
       const res = await fetch("/api/users/login", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        const text = (await res.text()).trim();
+        if (text.includes("Server action")) {
+          setError(
+            "Login service unavailable. Stop the dev server, delete the .next folder, and run npm run dev again."
+          );
+        } else {
+          setError(text.slice(0, 200) || `Sign in failed (${res.status})`);
+        }
+        return;
+      }
+
       const json = (await res.json()) as {
         code: number;
         message: string;

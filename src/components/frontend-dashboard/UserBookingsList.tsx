@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import CalendlyBookTrigger from "@/components/booking/CalendlyBookTrigger";
 import {
   Table,
   TableBody,
@@ -76,6 +76,14 @@ export default function UserBookingsList() {
   }, [user?.id]);
 
   useEffect(() => {
+    const refresh = () => {
+      if (user) void fetchApi();
+    };
+    window.addEventListener("fincast:booking-saved", refresh);
+    return () => window.removeEventListener("fincast:booking-saved", refresh);
+  }, [user, fetchApi]);
+
+  useEffect(() => {
     if (data && Array.isArray(data)) {
       setRows(data as BookingRow[]);
     }
@@ -89,15 +97,12 @@ export default function UserBookingsList() {
             My bookings
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Calls you have scheduled through the Book Call flow.
+            Calls you have scheduled through Calendly or past Book Call flow.
           </p>
         </div>
-        <Link
-          href="/book-call"
-          className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]"
-        >
+        <CalendlyBookTrigger className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-theme-sm font-medium text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03]">
           Book a call
-        </Link>
+        </CalendlyBookTrigger>
       </div>
 
       <div className="max-w-full overflow-x-auto">

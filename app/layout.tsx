@@ -1,3 +1,4 @@
+import Script from "next/script";
 import { Outfit } from "next/font/google";
 import "../src/app/globals.css";
 
@@ -19,6 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${roboto.variable} dark:bg-gray-900`} suppressHydrationWarning>
+        <Script
+          src="https://assets.calendly.com/assets/external/widget.js"
+          strategy="afterInteractive"
+        />
         <ThemeProvider>
           <SidebarProvider>{children}</SidebarProvider>
         </ThemeProvider>

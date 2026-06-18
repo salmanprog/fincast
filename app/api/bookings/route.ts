@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { UserType } from "@prisma/client";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getBearerUserIdOrNull } from "@/lib/authFromRequest";
-import { createBookingEventWithAccessToken } from "@/lib/googleCalendar";
-import { resolveBookingUserId } from "@/lib/resolveBookingUserId";
+import {
+  buildInviteeMessage,
+  extractCalendlyEventUuid,
+  extractCalendlyInviteeUuid,
+  fetchCalendlyInvitee,
+  fetchCalendlyScheduledEvent,
+  formatBookingDateTime,
+} from "@/lib/calendlyServer";
 
 export const runtime = "nodejs";
 
@@ -61,46 +66,25 @@ export async function GET(req: Request) {
   }
 }
 
-type BookingBody = {
-  name?: string;
-  email?: string;
-  phone?: string;
-  date?: string;
-  time?: string;
-  message?: string;
+type CalendlyBookingBody = {
+  calendlyEventUri?: string;
+  calendlyInviteeUri?: string;
 };
 
-function parseStartEnd(date: string, time: string): { startIso: string; endIso: string } {
-  const start = new Date(`${date}T${time}`);
-  if (Number.isNaN(start.getTime())) {
-    throw new Error("Invalid date or time.");
-  }
-  const end = new Date(start.getTime() + 30 * 60 * 1000);
-  return { startIso: start.toISOString(), endIso: end.toISOString() };
-}
-
+/** Save a Calendly booking to the database for the logged-in user. */
 export async function POST(req: Request) {
   try {
-    const session = await auth();
-    const accessToken = session?.accessToken;
-
-    if (!session?.user || !accessToken) {
+    const userId = await getBearerUserIdOrNull(req);
+    if (userId === null) {
       return NextResponse.json(
-        { success: false, message: "Sign in with Google to schedule a call." },
+        { success: false, message: "Please log in to schedule a call." },
         { status: 401 }
       );
     }
 
-    if (session.error) {
-      return NextResponse.json(
-        { success: false, message: "Google session expired. Please sign in again." },
-        { status: 401 }
-      );
-    }
-
-    let body: BookingBody;
+    let body: CalendlyBookingBody;
     try {
-      body = (await req.json()) as BookingBody;
+      body = (await req.json()) as CalendlyBookingBody;
     } catch {
       return NextResponse.json(
         { success: false, message: "Invalid JSON body." },
@@ -108,63 +92,75 @@ export async function POST(req: Request) {
       );
     }
 
-    const name = body.name?.trim() ?? "";
-    const email = body.email?.trim() ?? "";
-    const phone = body.phone?.trim() ?? "";
-    const date = body.date?.trim() ?? "";
-    const time = body.time?.trim() ?? "";
-    const message = body.message?.trim() ?? "";
+    const calendlyEventUri = body.calendlyEventUri?.trim() ?? "";
+    const calendlyInviteeUri = body.calendlyInviteeUri?.trim() ?? "";
 
-    if (!name || !email || !date || !time) {
+    if (!calendlyEventUri || !calendlyInviteeUri) {
       return NextResponse.json(
         {
           success: false,
-          message: "Name, email, date, and time are required.",
-          errors: {
-            ...(!name ? { name: "Name is required." } : {}),
-            ...(!email ? { email: "Email is required." } : {}),
-            ...(!date ? { date: "Date is required." } : {}),
-            ...(!time ? { time: "Time is required." } : {}),
-          },
+          message: "Calendly event and invitee URIs are required.",
         },
         { status: 422 }
       );
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { success: false, message: "Please enter a valid email address." },
-        { status: 422 }
-      );
-    }
+    const calendlyEventId = extractCalendlyEventUuid(calendlyEventUri);
+    const calendlyInviteeId = extractCalendlyInviteeUuid(calendlyInviteeUri);
 
-    const userResult = await resolveBookingUserId(req, session.user.email ?? email);
-    if ("error" in userResult) {
-      return NextResponse.json(
-        { success: false, message: userResult.error },
-        { status: userResult.status }
-      );
-    }
-
-    const { startIso, endIso } = parseStartEnd(date, time);
-
-    const calendarEvent = await createBookingEventWithAccessToken(accessToken, {
-      name,
-      email,
-      startIso,
-      endIso,
-      notes: message || undefined,
+    const existing = await prisma.booking.findFirst({
+      where: {
+        userId,
+        OR: [
+          { googleEventId: calendlyEventId },
+          ...(calendlyInviteeId ? [{ googleEventId: calendlyInviteeId }] : []),
+        ],
+      },
     });
+    if (existing) {
+      return NextResponse.json({
+        success: true,
+        message: "Your call is already saved.",
+        data: { id: existing.id, googleEventId: existing.googleEventId },
+      });
+    }
 
-    const googleEventId = calendarEvent.id ?? null;
-    if (!googleEventId) {
+    const [{ resource: event }, { resource: invitee }] = await Promise.all([
+      fetchCalendlyScheduledEvent(calendlyEventUri),
+      fetchCalendlyInvitee(calendlyInviteeUri),
+    ]);
+
+    const timeZone =
+      event.timezone?.trim() ||
+      process.env.GOOGLE_CALENDAR_TIMEZONE ||
+      "America/New_York";
+    const { date, time } = formatBookingDateTime(event.start_time, timeZone);
+    const name = invitee.name?.trim() || "Guest";
+    const email = invitee.email?.trim() || "";
+    const phone = invitee.text_reminder_number?.trim() || null;
+    const message = buildInviteeMessage(invitee);
+
+    if (!email) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Calendar event was created but no event id was returned.",
-        },
-        { status: 500 }
+        { success: false, message: "Calendly invitee email is missing." },
+        { status: 422 }
       );
+    }
+
+    const duplicate = await prisma.booking.findFirst({
+      where: {
+        userId,
+        email,
+        date,
+        time,
+      },
+    });
+    if (duplicate) {
+      return NextResponse.json({
+        success: true,
+        message: "Your call is already saved.",
+        data: { id: duplicate.id, googleEventId: duplicate.googleEventId },
+      });
     }
 
     if (!prisma.booking?.create) {
@@ -172,7 +168,7 @@ export async function POST(req: Request) {
         {
           success: false,
           message:
-            "Server needs a restart after database update. Stop the dev server, run npx prisma generate, then npm run dev.",
+            "Server needs a restart after database update. Run npx prisma generate, then restart.",
         },
         { status: 503 }
       );
@@ -180,14 +176,14 @@ export async function POST(req: Request) {
 
     const booking = await prisma.booking.create({
       data: {
-        userId: userResult.userId,
+        userId,
         name,
         email,
-        phone: phone || null,
+        phone,
         date,
         time,
-        message: message || null,
-        googleEventId,
+        message,
+        googleEventId: calendlyEventId,
       },
     });
 
@@ -197,15 +193,13 @@ export async function POST(req: Request) {
       data: {
         id: booking.id,
         googleEventId: booking.googleEventId,
-        htmlLink: calendarEvent.htmlLink ?? null,
-        meetLink:
-          calendarEvent.hangoutLink ??
-          calendarEvent.conferenceData?.entryPoints?.[0]?.uri ??
-          null,
+        date: booking.date,
+        time: booking.time,
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Could not save your booking.";
+    const message =
+      err instanceof Error ? err.message : "Could not save your booking.";
     console.error("[POST /api/bookings]", err);
     return NextResponse.json({ success: false, message }, { status: 500 });
   }

@@ -15,6 +15,7 @@ import {
   AlertTriangle, Calendar, TrendingDown, TrendingUp, ShieldCheck,
   RefreshCw, MousePointer2, Printer, ChevronDown, ChevronUp, BookOpen, Play,
 } from "lucide-react";
+import CalendlyBookTrigger from "@/components/booking/CalendlyBookTrigger";
 
 let cachedFemaleVoice: SpeechSynthesisVoice | null = null;
 
@@ -769,9 +770,9 @@ export default function FinCastSelfDemo() {
                     <div className="text-2xl font-semibold">See how FinCast Reva works in a client meeting.</div>
                     <p className="text-slate-300 mt-1">Book a 15-minute advisor walkthrough.</p>
                   </div>
-                  <Button className="rounded-2xl px-6 py-6 text-base bg-white text-slate-950 hover:bg-slate-100">
+                  <CalendlyBookTrigger className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-6 text-base bg-white text-slate-950 hover:bg-slate-100">
                     <Calendar className="w-4 h-4 mr-2" /> Book Walkthrough
-                  </Button>
+                  </CalendlyBookTrigger>
                 </div>
               </CardContent>
             </Card>

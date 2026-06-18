@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
+import { CalendlyBookLink } from "@/components/booking/CalendlyBookTrigger";
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -45,9 +46,9 @@ export default function Footer() {
             </p>
             <ul className="mt-4 space-y-3 text-sm font-medium text-slate-700">
               <li>
-                <a href="#book" className="hover:text-brand-700">
+                <CalendlyBookLink className="hover:text-brand-700">
                   Book a call
-                </a>
+                </CalendlyBookLink>
               </li>
               <li>
                 <a href="#terms" className="hover:text-brand-700">

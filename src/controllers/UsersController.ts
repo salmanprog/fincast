@@ -116,9 +116,18 @@ export default class UsersController extends RestController<
         "web"
       );
       const loginuser = await prisma.user.findUnique({ where: { email }, include: {userRole: true,apiTokens: true,}, });
-      const extendedUser = loginuser as ExtendedUser;
+      if (!loginuser) {
+        return this.sendError("Login failed", {}, 500);
+      }
 
-      return this.__sendResponse(200, "Login successful", extendedUser);
+      const resource = new UserResource();
+      const payload = await resource.toArray(loginuser as ExtendedUser);
+
+      return NextResponse.json({
+        code: 200,
+        message: "Login successful",
+        data: payload,
+      });
     } catch (err) {
       return this.sendError((err as Error).message, {}, 500);
     }

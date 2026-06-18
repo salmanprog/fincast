@@ -1,12 +1,8 @@
-import { NextResponse } from "next/server";
-import { isGoogleCalendarConnected, resolveGoogleRedirectUri } from "@/lib/googleCalendar";
+import { googleCalendarBookingDisabledResponse } from "@/lib/bookingDisabled";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
-  return NextResponse.json({
-    connected: isGoogleCalendarConnected(),
-    setupUrl: "/api/booking/google?setup=1",
-    redirectUri: resolveGoogleRedirectUri(req),
-  });
+/** @deprecated Google Calendar connection status — booking uses Calendly. */
+export async function GET() {
+  return googleCalendarBookingDisabledResponse();
 }
