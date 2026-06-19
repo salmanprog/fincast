@@ -2,7 +2,7 @@ import FinCastSelfDemo from "@/components/demo/FinCastSelfDemo";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "FinCast | Demo",
+  title: "FinCast Reva — Self-Demo",
   description: "Plan your retirement with FinCast",
 };
 

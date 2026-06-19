@@ -172,6 +172,13 @@ export default function FinCastSelfDemo() {
       const openPrint = () => {
         try {
           window?.speechSynthesis?.cancel?.();
+          const previousTitle = document.title;
+          document.title = "FinCast Reva — Self-Demo";
+          const restoreTitle = () => {
+            document.title = previousTitle;
+            window.removeEventListener("afterprint", restoreTitle);
+          };
+          window.addEventListener("afterprint", restoreTitle);
           window.print();
         } catch { /* ignore */ }
       };
@@ -449,11 +456,25 @@ export default function FinCastSelfDemo() {
 
   const handlePrint = () => {
     window.speechSynthesis?.cancel?.();
+    const previousTitle = document.title;
+    document.title = "FinCast Reva — Self-Demo";
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    window.addEventListener("afterprint", restoreTitle);
     window.print();
   };
 
   useEffect(() => {
     setPrintPortalRoot(document.body);
+    document.body.classList.add("fincast-demo-active");
+    const previousTitle = document.title;
+    document.title = "FinCast Reva — Self-Demo";
+    return () => {
+      document.body.classList.remove("fincast-demo-active");
+      document.title = previousTitle;
+    };
   }, []);
 
   useEffect(() => {
@@ -488,14 +509,10 @@ export default function FinCastSelfDemo() {
 
   return (
     <>
-      {/* PRINT-ONLY ONE-PAGE SUMMARY (portal → body so print CSS can show it)*/}
+      {/* PRINT-ONLY SUMMARY (portal → body so print CSS can show it) */}
       {printPortalRoot &&
         createPortal(
-          <div
-            id="fincast-print-summary"
-            style={{ display: "none" }}
-            aria-hidden="true"
-          >
+          <div id="fincast-print-summary" aria-hidden="true">
             <PrintSummary
               clientName={clientName}
               ageNow={ageNow}
@@ -516,27 +533,126 @@ export default function FinCastSelfDemo() {
           printPortalRoot
         )}
 
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
+        body.fincast-demo-active #fincast-print-summary {
+          position: absolute;
+          left: -99999px;
+          top: 0;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+        }
         @media print {
-          .fincast-demo-pointer {
+          body.fincast-demo-active > *:not(#fincast-print-summary) {
             display: none !important;
           }
-          .fincast-demo-card {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          .fincast-demo-result-card {
-            break-before: page;
-            page-break-before: always;
+          body.fincast-demo-active #fincast-print-summary {
+            display: block !important;
+            position: static !important;
+            left: auto !important;
+            width: 100% !important;
+            height: auto !important;
             overflow: visible !important;
+            clip: auto !important;
+            white-space: normal !important;
+            margin: 0 !important;
+            padding: 0.25in !important;
+            background: #fff !important;
+            font-family: Arial, Helvetica, sans-serif !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
-          .fincast-demo-result-chart {
-            height: 30rem !important;
+          body.fincast-demo-active #fincast-print-summary * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
+          body.fincast-demo-active #fincast-print-summary .recharts-cartesian-axis-tick-value,
+          body.fincast-demo-active #fincast-print-summary .recharts-text {
+            font-family: Arial, Helvetica, sans-serif !important;
+            font-weight: 700 !important;
+            fill: #000000 !important;
+          }
+          body.fincast-demo-active #fincast-print-summary .fincast-print-disclaimer {
+            font-weight: 400 !important;
+          }
+          .fincast-print-talking-point {
+            display: block !important;
+          }
+          .fincast-print-page-1,
+          .fincast-print-page-2 {
+            position: relative;
+            min-height: 7.25in;
+            box-sizing: border-box;
+          }
+          .fincast-print-page-2 {
+            page-break-before: always;
+            break-before: page;
+            padding-top: 0;
+            font-size: 12.5px;
+            color: #2d2d2d;
+            line-height: 1.45;
+          }
+          .fincast-print-browser-footer--block {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9px;
+            color: #5f6368;
+            line-height: 1.35;
+          }
+          .fincast-print-browser-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: baseline;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9px;
+            color: #5f6368;
+            line-height: 1.35;
+          }
+          .fincast-print-browser-date {
+            justify-self: start;
+            grid-column: 1;
+          }
+          .fincast-print-browser-title {
+            justify-self: center;
+            grid-column: 2;
+            text-align: center;
+          }
+          .fincast-print-browser-footer--split {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9px;
+            color: #5f6368;
+            line-height: 1.35;
+          }
+          .fincast-print-page-2-body {
+            padding-top: 18px;
+          }
+          .fincast-print-browser-footer-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+          }
+          @page { size: letter landscape; margin: 0.25in; }
         }
-      `}</style>
+      `}} />
 
-      {/* MAIN APP */}
+      {/* MAIN APP — hidden when printing; PDF uses PrintSummary only */}
+      <div id="fincast-demo-screen">
       <div className="min-h-screen bg-slate-50 text-slate-950 p-4 md:p-8 relative overflow-hidden">
         <motion.div
           className="fincast-demo-pointer fixed z-50 text-slate-900 pointer-events-none"
@@ -857,6 +973,8 @@ export default function FinCastSelfDemo() {
           )}
         </div>
 
+        </div>
+
       </div>
     </>
   );
@@ -928,6 +1046,122 @@ const OBJECTIONS = [
 
 // Print summary component
 
+const PRINT_DOC_TITLE = "FinCast Reva — Self-Demo";
+const PRINT_DOC_URL = "https://build-freedom.ai/app";
+
+/** Neutral print palette — matches browser PDF (black/grey), not slate UI colors */
+const PRINT_COLOR = {
+  black: "#000000",
+  body: "#2d2d2d",
+  section: "#2d2d2d",
+  label: "#2d2d2d",
+  meta: "#4d4d4d",
+  muted: "#808080",
+  disclaimer: "#555555",
+  risk: "#b45309",
+  riskHeading: "#b45309",
+  border: "#dddddd",
+  grid: "#cccccc",
+  axis: "#333333",
+} as const;
+
+function formatPrintTimestamp(d: Date) {
+  return d.toLocaleString("en-US", {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function PrintBrowserChrome({
+  page,
+  totalPages,
+  layout,
+}: {
+  page: number;
+  totalPages: number;
+  layout: "footer-block" | "split";
+}) {
+  const printedAt = formatPrintTimestamp(new Date());
+
+  if (layout === "split") {
+    return (
+      <>
+        <div className="fincast-print-browser-header" aria-hidden="true">
+          <span className="fincast-print-browser-date">{printedAt}</span>
+          <span className="fincast-print-browser-title">{PRINT_DOC_TITLE}</span>
+        </div>
+        <div className="fincast-print-browser-footer fincast-print-browser-footer--split" aria-hidden="true">
+          <span>{PRINT_DOC_URL}</span>
+          <span>{page}/{totalPages}</span>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="fincast-print-browser-footer fincast-print-browser-footer--block" aria-hidden="true">
+      <div className="fincast-print-browser-footer-row">
+        <span>{printedAt}</span>
+        <span>{PRINT_DOC_TITLE}</span>
+      </div>
+      <div className="fincast-print-browser-footer-row">
+        <span>{PRINT_DOC_URL}</span>
+        <span>{page}/{totalPages}</span>
+      </div>
+    </div>
+  );
+}
+
+function formatPrintCurrency(v: number): string {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e15) return `$${(n / 1e15).toFixed(1)}Q`;
+  if (abs >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  return `$${n.toLocaleString()}`;
+}
+
+function formatPrintPlainNumber(v: number, maxDigits = 10): string {
+  const s = String(Math.round(Number(v)));
+  if (!Number.isFinite(Number(v))) return "—";
+  if (s.length <= maxDigits) return s;
+  return `${s.slice(0, maxDigits - 1)}…`;
+}
+
+function formatChartAxisValue(v: number): string {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "$0";
+  const abs = Math.abs(n);
+  if (abs >= 1e15) return `$${(n / 1e15).toFixed(1)}Q`;
+  if (abs >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (abs >= 1000) return `$${Math.round(n / 1000)}k`;
+  return `$${Math.round(n)}`;
+}
+
+function maxScenarioBalance(
+  data: { "Base Case": number; "Retire Later": number; "Spend Less": number; "Stress Return": number }[]
+): number {
+  let max = 0;
+  for (const row of data) {
+    max = Math.max(
+      max,
+      row["Base Case"] ?? 0,
+      row["Retire Later"] ?? 0,
+      row["Spend Less"] ?? 0,
+      row["Stress Return"] ?? 0,
+    );
+  }
+  return max;
+}
+
 function PrintSummary({
   clientName, ageNow, retireAge, currentSavings, annualContributions, annualReturn,
   retirementSpending, ssIncome, otherRetirementIncome, inflation, projection, scenarioData, resultMessage, today,
@@ -939,62 +1173,86 @@ function PrintSummary({
   scenarioData: { age: number; "Base Case": number; "Retire Later": number; "Spend Less": number; "Stress Return": number }[];
   resultMessage: string; today: string;
 }) {
-  const fmt = (v: number) => `$${Number(v).toLocaleString()}`;
+  const fmt = formatPrintCurrency;
   const isRisk = !!projection.depletionAge;
+  const chartMax = maxScenarioBalance(scenarioData);
+  const yAxisLabel = formatChartAxisValue(chartMax);
+  const yAxisWidth = Math.min(88, Math.max(52, yAxisLabel.length * 6.5 + 10));
 
   const inputs = [
-    { label: "Current Age", value: `${ageNow}` },
-    { label: "Retirement Age", value: `${retireAge}` },
+    { label: "Current Age", value: formatPrintPlainNumber(ageNow) },
+    { label: "Retirement Age", value: formatPrintPlainNumber(retireAge) },
     { label: "Portfolio Savings", value: fmt(currentSavings) },
     { label: "Pre-retirement Contributions", value: fmt(annualContributions) },
-    { label: "Annual Return", value: `${annualReturn}%` },
+    { label: "Annual Return", value: `${formatPrintPlainNumber(annualReturn, 6)}%` },
     { label: "Retirement Spending", value: fmt(retirementSpending) },
     { label: "SS / Retirement Income", value: fmt(ssIncome) },
     { label: "Other Retirement Income", value: fmt(otherRetirementIncome) },
-    { label: "Spending Inflation", value: `${inflation}%` },
+    { label: "Spending Inflation", value: `${formatPrintPlainNumber(inflation, 6)}%` },
   ];
+
+  const printValueCellStyle: React.CSSProperties = {
+    padding: "4px 0",
+    fontWeight: 700,
+    textAlign: "right",
+    color: PRINT_COLOR.black,
+    maxWidth: 0,
+    width: "42%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  };
+
+  const printLabelCellStyle: React.CSSProperties = {
+    padding: "4px 0",
+    color: PRINT_COLOR.label,
+    fontWeight: 400,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="fincast-print-page-1">
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", letterSpacing: "-0.5px" }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: PRINT_COLOR.black, letterSpacing: "-0.5px" }}>
             FinCast Reva — Retirement Projection Summary{clientName ? `: ${clientName}` : ""}
           </div>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: PRINT_COLOR.meta, marginTop: 4, fontWeight: 400 }}>
             Prepared {today} · For advisor use only · Not a guarantee of future results
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: PRINT_COLOR.muted, marginTop: 2, fontWeight: 400 }}>
             No client data was saved or retained in the preparation of this document.
           </div>
         </div>
         <div style={{
-          padding: "6px 14px",
-          borderRadius: 999,
-          background: isRisk ? "#fef3c7" : "#d1fae5",
-          color: isRisk ? "#92400e" : "#065f46",
-          fontWeight: 600,
+          color: isRisk ? PRINT_COLOR.risk : "#15803d",
+          fontWeight: 700,
           fontSize: 13,
+          background: "transparent",
+          whiteSpace: "nowrap",
         }}>
           {isRisk ? "⚠ Depletion Risk" : "✓ On Track"}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 14 }}>
         {/* Left column: inputs + talking points */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0, overflow: "hidden" }}>
           {/* Inputs table */}
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+          <div style={{ minWidth: 0, overflow: "hidden" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLOR.section, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
               Client Assumptions
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, tableLayout: "fixed" }}>
               <tbody>
                 {inputs.map(({ label, value }) => (
-                  <tr key={label} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                    <td style={{ padding: "4px 0", color: "#64748b" }}>{label}</td>
-                    <td style={{ padding: "4px 0", fontWeight: 600, textAlign: "right", color: "#0f172a" }}>{value}</td>
+                  <tr key={label} style={{ borderBottom: `1px solid ${PRINT_COLOR.border}` }}>
+                    <td style={printLabelCellStyle}>{label}</td>
+                    <td style={printValueCellStyle} title={value}>{value}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1008,14 +1266,14 @@ function PrintSummary({
             borderRadius: 8,
             padding: "10px 12px",
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: isRisk ? "#92400e" : "#166534", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: isRisk ? PRINT_COLOR.riskHeading : "#166534", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Projection Outcome
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: isRisk ? "#b45309" : "#15803d", lineHeight: 1.35 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: isRisk ? PRINT_COLOR.risk : "#15803d", lineHeight: 1.35 }}>
               {resultMessage}
             </div>
             {!isRisk && projection.finalBalance > 0 && (
-              <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fmt(projection.finalBalance)}>
                 Est. balance at age 100: {fmt(projection.finalBalance)}
               </div>
             )}
@@ -1023,7 +1281,7 @@ function PrintSummary({
 
           {/* Talking points */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLOR.section, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
               Advisor Talking Points
             </div>
             {[
@@ -1031,47 +1289,52 @@ function PrintSummary({
               isRisk
                 ? `At the current pace, savings may be exhausted around age ${projection.depletionAge}. Adjusting retirement age, spending, or return assumptions can significantly change the outlook.`
                 : "Based on these assumptions, the portfolio is projected to remain positive. Stress-testing scenarios helps clients understand the margin of safety.",
-              "Small changes — retiring 1-2 years later or reducing annual spending by 5-10% — can meaningfully extend portfolio life.",
             ].map((point, i) => (
-              <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 12.5, color: "#334155", lineHeight: 1.45 }}>
-                <span style={{ color: "#94a3b8", flexShrink: 0, marginTop: 1 }}>•</span>
+              <div key={i} className="fincast-print-talking-point" style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 12.5, color: PRINT_COLOR.body, lineHeight: 1.45, fontWeight: 400 }}>
+                <span style={{ color: PRINT_COLOR.body, flexShrink: 0, marginTop: 1 }}>•</span>
                 <span>{point}</span>
               </div>
             ))}
+            <div className="fincast-print-talking-point" style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 12.5, color: PRINT_COLOR.body, lineHeight: 1.45, fontWeight: 400 }}>
+              <span style={{ color: PRINT_COLOR.body, flexShrink: 0, marginTop: 1 }}>•</span>
+              <span>
+                Small changes — retiring 1-2 years later or reducing annual spending by 5-10% — can
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Right column: chart */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLOR.section, textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Projected Portfolio Balance — All Scenarios (Age {ageNow}–100)
           </div>
-          <div>
+          <div style={{ overflow: "hidden" }}>
             <LineChart
               width={820}
               height={420}
               data={scenarioData}
-              margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
+              margin={{ top: 8, right: 12, left: 0, bottom: 4 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
+              <CartesianGrid strokeDasharray="3 3" stroke={PRINT_COLOR.grid} />
               <XAxis
                 dataKey="age"
                 type="number"
                 domain={[ageNow, 100]}
                 ticks={[60, 65, 70, 75, 80, 85, 90, 95, 100]}
-                tick={{ fontSize: 15, fill: "#0f172a", fontWeight: 600 }}
+                tick={{ fontSize: 15, fill: PRINT_COLOR.black, fontWeight: "bold" }}
                 tickMargin={4}
-                stroke="#475569"
+                stroke={PRINT_COLOR.axis}
                 height={32}
               />
               <YAxis
-                tickFormatter={(v) => `$${Math.round(v / 1000)}k`}
-                tick={{ fontSize: 15, fill: "#0f172a", fontWeight: 600 }}
-                tickMargin={8}
-                stroke="#475569"
-                width={68}
+                tickFormatter={formatChartAxisValue}
+                tick={{ fontSize: 13, fill: PRINT_COLOR.black, fontWeight: "bold" }}
+                tickMargin={4}
+                stroke={PRINT_COLOR.axis}
+                width={yAxisWidth}
               />
-              <ReferenceLine x={retireAge} stroke="#475569" strokeDasharray="4 4" strokeWidth={2} label={{ value: "Retire", fontSize: 15, fill: "#0f172a", fontWeight: 700 }} />
+              <ReferenceLine x={retireAge} stroke={PRINT_COLOR.axis} strokeDasharray="4 4" strokeWidth={2} label={{ value: "Retire", fontSize: 15, fill: PRINT_COLOR.black, fontWeight: "bold" }} />
               <Line type="monotone" dataKey="Base Case"     stroke="#1e3a8a" strokeWidth={4} dot={false} isAnimationActive={false} />
               <Line type="monotone" dataKey="Retire Later"  stroke="#047857" strokeWidth={3} dot={false} strokeDasharray="8 4" isAnimationActive={false} />
               <Line type="monotone" dataKey="Spend Less"    stroke="#6d28d9" strokeWidth={3} dot={false} strokeDasharray="8 4" isAnimationActive={false} />
@@ -1084,8 +1347,8 @@ function PrintSummary({
             gap: "8px 20px",
             paddingTop: 12,
             fontSize: 14,
-            fontWeight: 600,
-            color: "#0f172a",
+            fontWeight: 700,
+            color: PRINT_COLOR.black,
           }}>
             {[
               { label: `Base Case ($${(retirementSpending/1000).toFixed(0)}k/yr spend)`, color: "#1e3a8a", dashed: false },
@@ -1106,15 +1369,27 @@ function PrintSummary({
               </div>
             ))}
           </div>
-          <div style={{
+          <div className="fincast-print-disclaimer" style={{
             fontSize: 10.5,
-            color: "#94a3b8",
-            borderTop: "1px solid #e2e8f0",
+            color: PRINT_COLOR.disclaimer,
+            borderTop: `1px solid ${PRINT_COLOR.border}`,
             paddingTop: 6,
             lineHeight: 1.45,
+            fontWeight: 400,
           }}>
             This projection is based on the assumptions entered above and uses a straight-line return model. It does not account for taxes, investment fees, or income sources beyond those entered. This document is for illustrative and discussion purposes only and does not constitute financial advice. Past performance is not indicative of future results.
           </div>
+        </div>
+      </div>
+
+      <PrintBrowserChrome page={1} totalPages={2} layout="footer-block" />
+      </div>
+
+      {/* Page 2 — bullet continuation (matches original 2-page PDF) */}
+      <div className="fincast-print-page-2">
+        <PrintBrowserChrome page={2} totalPages={2} layout="split" />
+        <div className="fincast-print-page-2-body" style={{ fontWeight: 400, color: PRINT_COLOR.body }}>
+          meaningfully extend portfolio life.
         </div>
       </div>
     </div>
