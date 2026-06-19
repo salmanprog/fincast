@@ -74,14 +74,19 @@ export default class CheckoutController extends Controller {
         return this.sendError("Invalid JSON", {}, 400);
       }
 
-      const plan = body.plan === "pro" ? "pro" : "starter";
+      const planSlug =
+        typeof body.plan === "string" ? body.plan.trim().toLowerCase() : "";
+
+      if (!planSlug) {
+        return this.sendError("Plan is required", { plan: "Missing plan slug." }, 422);
+      }
 
       const planRow = await prisma.plan.findFirst({
-        where: { slug: plan, deletedAt: null, status: true },
+        where: { slug: planSlug, deletedAt: null, status: true },
       });
 
       if (!planRow) {
-        return this.sendError(`Plan "${plan}" is not available`, {}, 404);
+        return this.sendError(`Plan "${planSlug}" is not available`, {}, 404);
       }
 
       const stripe = new Stripe(secret);
@@ -105,7 +110,7 @@ export default class CheckoutController extends Controller {
         success_url: `${base}/pricing?checkout=success`,
         cancel_url: `${base}/pricing?checkout=cancel`,
         client_reference_id: user.id,
-        metadata: { userId: user.id, plan },
+        metadata: { userId: user.id, plan: planSlug },
       });
 
       if (!session.url) {
@@ -182,7 +187,14 @@ export default class CheckoutController extends Controller {
       );
     }
 
-    const planSlug = (session.metadata?.plan === "pro" ? "pro" : "starter") as string;
+    const planSlug = session.metadata?.plan?.trim().toLowerCase() ?? "";
+
+    if (!planSlug) {
+      return NextResponse.json(
+        { code: 200, message: "ignored_no_plan", received: true },
+        { status: 200 }
+      );
+    }
 
     try {
       const planRow = await prisma.plan.findFirst({

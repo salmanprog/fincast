@@ -13,8 +13,6 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
-type CheckoutSlug = "starter" | "pro";
-
 type PlanFromApi = {
   id: number;
   slug: string;
@@ -24,10 +22,6 @@ type PlanFromApi = {
   credits: number;
   status: boolean;
 };
-
-function isCheckoutSlug(slug: string): slug is CheckoutSlug {
-  return slug === "starter" || slug === "pro";
-}
 
 /** Fallback when /api/plans fails (matches seeded defaults) */
 const FALLBACK_PLANS: PlanFromApi[] = [
@@ -88,7 +82,7 @@ function FinCastPricingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loadingUser } = useCurrentUser();
-  const [checkoutPlan, setCheckoutPlan] = useState<CheckoutSlug | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [planRows, setPlanRows] = useState<PlanFromApi[]>([]);
   const [hasMounted, setHasMounted] = useState(false);
@@ -134,19 +128,19 @@ function FinCastPricingPageInner() {
       : `${balanceCredits} ${balanceCredits === 1 ? "credit" : "credits"}`;
 
   const startCheckout = useCallback(
-    async (plan: CheckoutSlug) => {
+    async (planSlug: string) => {
       setCheckoutError(null);
       const token = getStoredToken();
       if (!user || !token) {
         const q = new URLSearchParams({
           returnUrl: "/pricing",
-          plan,
+          plan: planSlug,
         });
         router.push(`/login?${q.toString()}`);
         return;
       }
 
-      setCheckoutPlan(plan);
+      setCheckoutPlan(planSlug);
       try {
         const res = await fetch("/api/checkout/session", {
           method: "POST",
@@ -154,7 +148,7 @@ function FinCastPricingPageInner() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ plan }),
+          body: JSON.stringify({ plan: planSlug }),
         });
         const json = (await res.json()) as {
           code: number;
@@ -165,7 +159,7 @@ function FinCastPricingPageInner() {
         if (!res.ok) {
           if (res.status === 401) {
             router.push(
-              `/login?returnUrl=${encodeURIComponent("/pricing")}&plan=${plan}`
+              `/login?returnUrl=${encodeURIComponent("/pricing")}&plan=${encodeURIComponent(planSlug)}`
             );
             return;
           }
@@ -188,21 +182,21 @@ function FinCastPricingPageInner() {
     [router, user]
   );
 
-  const onPlanClick = (plan: CheckoutSlug) => {
+  const onPlanClick = (planSlug: string) => {
     if (loadingUser) return;
     if (!user) {
       router.push(
-        `/login?returnUrl=${encodeURIComponent("/pricing")}&plan=${plan}`
+        `/login?returnUrl=${encodeURIComponent("/pricing")}&plan=${encodeURIComponent(planSlug)}`
       );
       return;
     }
-    void startCheckout(plan);
+    void startCheckout(planSlug);
   };
 
   useEffect(() => {
     if (loadingUser || !user || autoCheckoutDone.current) return;
-    const planParam = searchParams.get("plan");
-    if (!planParam || !isCheckoutSlug(planParam)) return;
+    const planParam = searchParams.get("plan")?.trim().toLowerCase();
+    if (!planParam) return;
     autoCheckoutDone.current = true;
     void startCheckout(planParam);
   }, [loadingUser, user, searchParams, startCheckout]);
@@ -258,8 +252,6 @@ function FinCastPricingPageInner() {
       <div className="mx-auto mt-12 grid max-w-6xl gap-5 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch">
         {displayPlans.map((plan) => {
           const featured = plan.slug === "pro";
-          const canStripeCheckout = isCheckoutSlug(plan.slug);
-          const salesHref = `mailto:sales@fincast.com?subject=${encodeURIComponent(`FinCast ${plan.title}`)}`;
 
           if (featured) {
             return (
@@ -286,12 +278,12 @@ function FinCastPricingPageInner() {
                 </p>
                 <button
                   type="button"
-                  disabled={loadingUser || checkoutPlan === "pro"}
-                  onClick={() => onPlanClick("pro")}
+                  disabled={loadingUser || checkoutPlan === plan.slug}
+                  onClick={() => onPlanClick(plan.slug)}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-sky-400 hover:to-blue-500 disabled:opacity-60"
                 >
                   <CreditCard className="h-4 w-4" />
-                  {checkoutPlan === "pro" ? "Redirecting…" : `Purchase`}
+                  {checkoutPlan === plan.slug ? "Redirecting…" : `Purchase`}
                 </button>
               </div>
             );
@@ -320,7 +312,7 @@ function FinCastPricingPageInner() {
                 <button
                   type="button"
                   disabled={loadingUser || checkoutPlan === plan.slug}
-                  onClick={() => onPlanClick(plan.slug as CheckoutSlug)}
+                  onClick={() => onPlanClick(plan.slug)}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-950 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:opacity-60"
                 >
                   <CreditCard className="h-4 w-4" />

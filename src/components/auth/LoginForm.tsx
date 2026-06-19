@@ -71,9 +71,11 @@ export default function LoginForm() {
           !rawReturn.startsWith("//")
             ? rawReturn
             : null;
-        if (safeReturn && (plan === "starter" || plan === "pro")) {
+        if (safeReturn && plan?.trim()) {
           const sep = safeReturn.includes("?") ? "&" : "?";
-          window.location.assign(`${safeReturn}${sep}plan=${plan}`);
+          window.location.assign(
+            `${safeReturn}${sep}plan=${encodeURIComponent(plan.trim())}`
+          );
           return;
         }
         if (safeReturn) {
