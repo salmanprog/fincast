@@ -3,8 +3,9 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Playfair_Display } from "next/font/google";
-import { CreditCard, Mail } from "lucide-react";
-import { useCurrentUser } from "@/utils/currentUser";
+import { CreditCard } from "lucide-react";
+import { useCurrentUser, clearCurrentUserCache } from "@/utils/currentUser";
+import SquareCardCheckoutModal from "@/components/pricing/SquareCardCheckoutModal";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -82,8 +83,11 @@ function FinCastPricingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loadingUser } = useCurrentUser();
-  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null);
+  const [cardCheckoutPlan, setCardCheckoutPlan] = useState<PlanFromApi | null>(
+    null
+  );
   const [planRows, setPlanRows] = useState<PlanFromApi[]>([]);
   const [hasMounted, setHasMounted] = useState(false);
   const autoCheckoutDone = useRef(false);
@@ -127,59 +131,27 @@ function FinCastPricingPageInner() {
       ? "…"
       : `${balanceCredits} ${balanceCredits === 1 ? "credit" : "credits"}`;
 
-  const startCheckout = useCallback(
-    async (planSlug: string) => {
+  const openCardCheckout = useCallback(
+    (planSlug: string) => {
       setCheckoutError(null);
+      setCheckoutSuccess(null);
       const token = getStoredToken();
       if (!user || !token) {
-        const q = new URLSearchParams({
-          returnUrl: "/pricing",
-          plan: planSlug,
-        });
-        router.push(`/login?${q.toString()}`);
+        router.push(
+          `/login?returnUrl=${encodeURIComponent("/pricing")}&plan=${encodeURIComponent(planSlug)}`
+        );
         return;
       }
 
-      setCheckoutPlan(planSlug);
-      try {
-        const res = await fetch("/api/checkout/session", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ plan: planSlug }),
-        });
-        const json = (await res.json()) as {
-          code: number;
-          message: string;
-          data?: { url?: string };
-        };
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            router.push(
-              `/login?returnUrl=${encodeURIComponent("/pricing")}&plan=${encodeURIComponent(planSlug)}`
-            );
-            return;
-          }
-          setCheckoutError(json.message || "Could not start checkout");
-          return;
-        }
-
-        const url = json.data?.url;
-        if (url) {
-          window.location.assign(url);
-          return;
-        }
-        setCheckoutError("No checkout URL returned");
-      } catch {
-        setCheckoutError("Network error");
-      } finally {
-        setCheckoutPlan(null);
+      const plan = displayPlans.find((p) => p.slug === planSlug);
+      if (!plan) {
+        setCheckoutError("Plan not found");
+        return;
       }
+
+      setCardCheckoutPlan(plan);
     },
-    [router, user]
+    [displayPlans, router, user]
   );
 
   const onPlanClick = (planSlug: string) => {
@@ -190,7 +162,18 @@ function FinCastPricingPageInner() {
       );
       return;
     }
-    void startCheckout(planSlug);
+    openCardCheckout(planSlug);
+  };
+
+  const handlePaymentSuccess = (credits: number) => {
+    setCardCheckoutPlan(null);
+    clearCurrentUserCache();
+    setCheckoutSuccess(
+      `Payment successful! Your balance is now ${credits} ${credits === 1 ? "credit" : "credits"}.`
+    );
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 1500);
   };
 
   useEffect(() => {
@@ -198,8 +181,8 @@ function FinCastPricingPageInner() {
     const planParam = searchParams.get("plan")?.trim().toLowerCase();
     if (!planParam) return;
     autoCheckoutDone.current = true;
-    void startCheckout(planParam);
-  }, [loadingUser, user, searchParams, startCheckout]);
+    openCardCheckout(planParam);
+  }, [loadingUser, user, searchParams, openCardCheckout]);
 
   return (
     <div className="px-4 pb-16 pt-8 md:px-6">
@@ -226,6 +209,15 @@ function FinCastPricingPageInner() {
           role="alert"
         >
           {checkoutError}
+        </p>
+      ) : null}
+
+      {checkoutSuccess ? (
+        <p
+          className="mx-auto mt-6 max-w-lg rounded-lg bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-800"
+          role="status"
+        >
+          {checkoutSuccess}
         </p>
       ) : null}
 
@@ -278,12 +270,12 @@ function FinCastPricingPageInner() {
                 </p>
                 <button
                   type="button"
-                  disabled={loadingUser || checkoutPlan === plan.slug}
+                  disabled={loadingUser || cardCheckoutPlan?.slug === plan.slug}
                   onClick={() => onPlanClick(plan.slug)}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-sky-400 hover:to-blue-500 disabled:opacity-60"
                 >
                   <CreditCard className="h-4 w-4" />
-                  {checkoutPlan === plan.slug ? "Redirecting…" : `Purchase`}
+                  {cardCheckoutPlan?.slug === plan.slug ? "Opening…" : `Purchase`}
                 </button>
               </div>
             );
@@ -311,19 +303,29 @@ function FinCastPricingPageInner() {
               </p>
                 <button
                   type="button"
-                  disabled={loadingUser || checkoutPlan === plan.slug}
+                  disabled={loadingUser || cardCheckoutPlan?.slug === plan.slug}
                   onClick={() => onPlanClick(plan.slug)}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-950 py-3 text-sm font-semibold text-white transition hover:bg-brand-900 disabled:opacity-60"
                 >
                   <CreditCard className="h-4 w-4" />
-                  {checkoutPlan === plan.slug
-                    ? "Redirecting…"
+                  {cardCheckoutPlan?.slug === plan.slug
+                    ? "Opening…"
                     : `Purchase`}
                 </button>
             </div>
           );
         })}
       </div>
+
+      {cardCheckoutPlan && getStoredToken() ? (
+        <SquareCardCheckoutModal
+          open={Boolean(cardCheckoutPlan)}
+          plan={cardCheckoutPlan}
+          authToken={getStoredToken()!}
+          onClose={() => setCardCheckoutPlan(null)}
+          onSuccess={handlePaymentSuccess}
+        />
+      ) : null}
     </div>
   );
 }

@@ -197,7 +197,7 @@ export default function AdminPlansPage() {
               Pricing plans
             </h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Manage plans shown on the public pricing page and used at Stripe checkout.
+              Manage plans shown on the public pricing page and used at Square checkout.
             </p>
           </div>
           <Button size="sm" onClick={openCreate}>

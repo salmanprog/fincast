@@ -131,7 +131,7 @@ export default function UserPurchasePlansPage() {
                 isHeader
                 className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
               >
-                Stripe ref
+                Square ref
               </TableCell>
               <TableCell
                 isHeader
