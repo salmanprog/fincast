@@ -17,43 +17,52 @@ import {
 } from "lucide-react";
 import CalendlyBookTrigger from "@/components/booking/CalendlyBookTrigger";
 
-let cachedFemaleVoice: SpeechSynthesisVoice | null = null;
+const DEMO_AUDIO_SRC = "/audio/demo/demo-autdio.mp3";
+const DEMO_AUDIO_REFERENCE_DURATION = 59.016;
 
-/** Same voice picker the narration steps used originally — first matching voice in browser order. */
-function getPreferredFemaleVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
-  if (cachedFemaleVoice) return cachedFemaleVoice;
+/**
+ * When each demo step begins — derived from silence gaps in demo-autdio.mp3.
+ * Step 3 (index 3) = Scenario Conversation starts ~37.6s when chart narration ends.
+ * Step 4 (index 4) = Advisor CTA starts ~46.3s after conversation ends.
+ */
+const DEMO_AUDIO_STEP_TIMES = [0, 10.69, 22.59, 37.35, 46.31];
 
-  const voices = synth.getVoices();
-  if (!voices.length) return null;
+/** Per-step lead — step 3 (→ scenarios card) nudged earlier for 3→4 transition */
+const DEMO_AUDIO_STEP_LEAD_SEC = [0, 0.08, 0.08, 0.08, 0.8, 0.8];
 
-  const match =
-    voices.find(
-      (v) =>
-        v.name.includes("Serena") ||
-        v.name.includes("Samantha") ||
-        v.name.includes("Karen") ||
-        v.name.includes("Moira") ||
-        v.name.includes("Tessa") ||
-        v.name.includes("Google UK English Female") ||
-        v.name.includes("Google US English Female")
-    ) ?? null;
-
-  if (match) cachedFemaleVoice = match;
-  return match;
+function buildStepMarkers(duration: number, stepCount: number): number[] {
+  const scale = duration / DEMO_AUDIO_REFERENCE_DURATION;
+  return DEMO_AUDIO_STEP_TIMES.slice(0, stepCount).map((time) => time * scale);
 }
 
-function applyPreferredFemaleVoice(
-  utterance: SpeechSynthesisUtterance,
-  synth: SpeechSynthesis = window.speechSynthesis
-) {
-  const voice = getPreferredFemaleVoice(synth);
-  if (voice) utterance.voice = voice;
+function resolveDemoStep(currentTime: number, markers: number[]): number {
+  let step = 0;
+  for (let i = markers.length - 1; i >= 0; i--) {
+    const lead = DEMO_AUDIO_STEP_LEAD_SEC[i] ?? 0.08;
+    const threshold = i === 0 ? 0 : Math.max(0, markers[i] - lead);
+    if (currentTime >= threshold) {
+      step = i;
+      break;
+    }
+  }
+  return step;
+}
+
+function waitForDemoAudioReady(audio: HTMLAudioElement): Promise<void> {
+  if (audio.readyState >= 1 && Number.isFinite(audio.duration) && audio.duration > 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    audio.addEventListener("loadedmetadata", done, { once: true });
+    audio.addEventListener("canplaythrough", done, { once: true });
+    audio.load();
+  });
 }
 
 export default function FinCastSelfDemo() {
   const [demoStep, setDemoStep] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
-  const [narrationReplayKey, setNarrationReplayKey] = useState(0);
   const [scriptOpen, setScriptOpen] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [lineCounts, setLineCounts] = useState<[number, number, number, number]>([0, 0, 0, 0]);
@@ -71,7 +80,14 @@ export default function FinCastSelfDemo() {
   const [pointerPos, setPointerPos] = useState<{ top: number; left: number }>({ top: 90, left: 90 });
   const isAutoPlayingRef = useRef(false);
   useEffect(() => { isAutoPlayingRef.current = isAutoPlaying; }, [isAutoPlaying]);
-  const spokenStepRef = useRef<number>(-1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const stepMarkersRef = useRef<number[]>(buildStepMarkers(DEMO_AUDIO_REFERENCE_DURATION, 5));
+  const lastSyncedStepRef = useRef(-1);
+  const step2ChartStartedRef = useRef(false);
+  const syncDemoStepRef = useRef<(time: number) => void>(() => {});
+  const endOfDemoPdfFlowRef = useRef<() => void>(() => {});
+  const handleRunRef = useRef<(opts?: { onComplete?: () => void; durationBudgetMs?: number }) => void>(() => {});
+  const updatePointerRef = useRef<(step: number) => void>(() => {});
   const [isPaused, setIsPaused] = useState(false);
 
   const narrationSteps = [
@@ -99,135 +115,174 @@ export default function FinCastSelfDemo() {
 
   const nextStep = () => setDemoStep((s) => (s + 1) % narrationSteps.length);
 
-  const speakWithResume = (synth: SpeechSynthesis, utterance: SpeechSynthesisUtterance) => {
-    try { synth.resume(); } catch { /* ignore */ }
-    window.setTimeout(() => {
-      try { synth.resume(); } catch { /* ignore */ }
-      synth.speak(utterance);
-    }, 50);
+  const stopDemoAudio = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
   };
 
-  const startAutoDemo = () => {
-    window?.speechSynthesis?.cancel?.();
-    spokenStepRef.current = -1;
+  const playDemoAudio = async (fromStart = false) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (fromStart) audio.currentTime = 0;
+    try {
+      await audio.play();
+    } catch {
+      /* autoplay may be blocked until user gesture */
+    }
+  };
+
+  const startAutoDemo = async () => {
+    if (animTimerRef.current) clearInterval(animTimerRef.current);
+    stopDemoAudio();
+    lastSyncedStepRef.current = -1;
+    step2ChartStartedRef.current = false;
     setDemoStep(0);
     setIsPaused(false);
     setIsAutoPlaying(true);
-    setNarrationReplayKey((k) => k + 1);
+    isAutoPlayingRef.current = true;
+
+    const audio = audioRef.current;
+    if (audio) {
+      await waitForDemoAudioReady(audio);
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        stepMarkersRef.current = buildStepMarkers(audio.duration, narrationSteps.length);
+      }
+    }
+
+    void playDemoAudio(true);
   };
 
   const resumeAutoDemo = () => {
     if (animTimerRef.current) clearInterval(animTimerRef.current);
-    window?.speechSynthesis?.cancel?.();
-    spokenStepRef.current = -1;
     setIsPaused(false);
     setIsAutoPlaying(true);
-    setNarrationReplayKey((k) => k + 1);
+    isAutoPlayingRef.current = true;
+
+    const audio = audioRef.current;
+    if (audio) {
+      lastSyncedStepRef.current = -1;
+      syncDemoStepRef.current(audio.currentTime);
+    }
+
+    void playDemoAudio(false);
   };
 
   const stopAutoDemo = () => {
     if (animTimerRef.current) clearInterval(animTimerRef.current);
-    window?.speechSynthesis?.cancel?.();
+    stopDemoAudio();
     setIsPaused(true);
     setIsAutoPlaying(false);
+    isAutoPlayingRef.current = false;
   };
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const synth = window.speechSynthesis;
-    const primeVoices = () => getPreferredFemaleVoice(synth);
-    primeVoices();
-    synth.addEventListener("voiceschanged", primeVoices);
-    return () => synth.removeEventListener("voiceschanged", primeVoices);
-  }, []);
+  const endOfDemoPdfFlow = () => {
+    setIsAutoPlaying(false);
+    setIsPaused(false);
+    isAutoPlayingRef.current = false;
+    stopDemoAudio();
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    if (!isAutoPlaying) return;
-
-    // Avoid re-speaking the same step when only isAutoPlaying toggled
-    if (spokenStepRef.current === demoStep) return;
-    spokenStepRef.current = demoStep;
-    const synth = window.speechSynthesis;
-    synth.cancel();
-
-    const advance = () => {
-      if (!isAutoPlayingRef.current) return;
-      setTimeout(() => {
-        if (!isAutoPlayingRef.current) return;
-        // Use the ref (not setDemoStep updater) so React strict-mode double
-        // invocation cannot trigger the PDF intro twice.
-        if (spokenStepRef.current >= narrationSteps.length - 1) {
-          endOfDemoPdfFlow();
-        } else {
-          setDemoStep((s) => Math.min(s + 1, narrationSteps.length - 1));
-        }
-      }, 1400);
-    };
-
-    const endOfDemoPdfFlow = () => {
-      setIsAutoPlaying(false);
-      setIsPaused(false);
-      isAutoPlayingRef.current = false;
-      const openPrint = () => {
-        try {
-          window?.speechSynthesis?.cancel?.();
-          const previousTitle = document.title;
-          document.title = "FinCast Reva — Self-Demo";
-          const restoreTitle = () => {
-            document.title = previousTitle;
-            window.removeEventListener("afterprint", restoreTitle);
-          };
-          window.addEventListener("afterprint", restoreTitle);
-          window.print();
-        } catch { /* ignore */ }
-      };
+    const openPrint = () => {
       try {
-        const synth = window.speechSynthesis;
-        synth.cancel();
-        const intro = new SpeechSynthesisUtterance(
-          "Here is your one-page client summary from FinCast Reva, ready to save as a PDF."
-        );
-        intro.rate = 0.72;
-        intro.pitch = 0.96;
-        intro.volume = 0.9;
-        applyPreferredFemaleVoice(intro, synth);
-        let opened = false;
-        const openOnce = () => {
-          if (opened) return;
-          opened = true;
-          setTimeout(openPrint, 400);
+        const previousTitle = document.title;
+        document.title = "FinCast Reva — Self-Demo";
+        const restoreTitle = () => {
+          document.title = previousTitle;
+          window.removeEventListener("afterprint", restoreTitle);
         };
-        intro.onend = openOnce;
-        intro.onerror = openOnce;
-        setTimeout(() => {
-          try { synth.resume(); } catch { /* ignore */ }
-          speakWithResume(synth, intro);
-        }, 600);
-        // Safety net in case onend never fires
-        setTimeout(openOnce, 8000);
+        window.addEventListener("afterprint", restoreTitle);
+        window.print();
       } catch {
-        setTimeout(openPrint, 1200);
+        /* ignore */
       }
     };
 
-    const utterance = new SpeechSynthesisUtterance(narrationSteps[demoStep].voice);
-    utterance.rate = 0.68;
-    utterance.pitch = 0.96;
-    utterance.volume = 0.86;
-    applyPreferredFemaleVoice(utterance);
+    setTimeout(openPrint, 1200);
+  };
 
-    // Step 2 = "Instant Projection": skip the long narration and let the
-    // per-scenario voice ("Base case", "Retire later", "Spend less",
-    // "Stress return") speak in lockstep with each curve as it draws.
-    if (isAutoPlaying && demoStep === 2) {
-      handleRun({ onComplete: advance });
-      return;
+  endOfDemoPdfFlowRef.current = endOfDemoPdfFlow;
+
+  const syncDemoStepToAudio = (currentTime: number) => {
+    if (!isAutoPlayingRef.current) return;
+
+    const audio = audioRef.current;
+    const markers = stepMarkersRef.current;
+    const step = resolveDemoStep(currentTime, markers);
+
+    if (step !== lastSyncedStepRef.current) {
+      lastSyncedStepRef.current = step;
+
+      if (step === 2 && !step2ChartStartedRef.current) {
+        step2ChartStartedRef.current = true;
+        const stepStart = markers[2] ?? 0;
+        const stepEnd = markers[3] ?? audio?.duration ?? DEMO_AUDIO_REFERENCE_DURATION;
+        const budgetMs = Math.max(3000, (stepEnd - stepStart) * 1000);
+        handleRunRef.current({ durationBudgetMs: budgetMs, onComplete: () => {} });
+      }
+
+      setDemoStep(step);
+      updatePointerRef.current(step);
     }
+  };
 
-    utterance.onend = advance;
-    speakWithResume(synth, utterance);
-  }, [demoStep, isAutoPlaying, narrationReplayKey]);
+  syncDemoStepRef.current = syncDemoStepToAudio;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const audio = new Audio(DEMO_AUDIO_SRC);
+    audio.preload = "auto";
+    audioRef.current = audio;
+
+    const refreshMarkers = () => {
+      if (audio.duration && Number.isFinite(audio.duration)) {
+        stepMarkersRef.current = buildStepMarkers(audio.duration, narrationSteps.length);
+      }
+    };
+
+    const onTimeUpdate = () => {
+      syncDemoStepRef.current(audio.currentTime);
+    };
+
+    const onEnded = () => {
+      if (!isAutoPlayingRef.current) return;
+      endOfDemoPdfFlowRef.current();
+    };
+
+    audio.addEventListener("loadedmetadata", refreshMarkers);
+    audio.addEventListener("durationchange", refreshMarkers);
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded);
+    refreshMarkers();
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener("loadedmetadata", refreshMarkers);
+      audio.removeEventListener("durationchange", refreshMarkers);
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
+      audio.src = "";
+      audioRef.current = null;
+    };
+    // narrationSteps.length is static
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isAutoPlaying) return;
+
+    let rafId = 0;
+    const tick = () => {
+      const audio = audioRef.current;
+      if (audio && isAutoPlayingRef.current && !audio.paused) {
+        syncDemoStepRef.current(audio.currentTime);
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isAutoPlaying]);
 
   const [clientName, setClientName] = useState("");
 
@@ -334,65 +389,25 @@ export default function FinCastSelfDemo() {
   const riskTone = projection.depletionAge ? "text-amber-700" : "text-emerald-700";
   const currency = (value: number) => `$${Number(value || 0).toLocaleString()}`;
 
-  const scenarioVoiceLabels = [
-    "Base case",
-    "Retire later",
-    "Spend less",
-    "Stress return",
-  ];
-
-  const speak = (text: string) => {
-    try {
-      const synth = window.speechSynthesis;
-      if (!synth) return;
-      synth.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.rate = 0.95;
-      utter.pitch = 1;
-      utter.volume = 1;
-      applyPreferredFemaleVoice(utter, synth);
-      speakWithResume(synth, utter);
-    } catch { /* ignore */ }
-  };
-
-  const handleRun = (opts?: { onComplete?: () => void; suppressVoice?: boolean }) => {
+  const handleRun = (opts?: { onComplete?: () => void; durationBudgetMs?: number }) => {
     if (animTimerRef.current) clearInterval(animTimerRef.current);
-    // Don't cancel speech when the parent narration is providing voice already
-    if (!opts?.suppressVoice) window.speechSynthesis?.cancel?.();
     const fresh: [number, number, number, number] = [0, 0, 0, 0];
     lineCountsRef.current = [...fresh] as [number, number, number, number];
     currentLineRef.current = 0;
     setLineCounts(fresh);
     setHasRun(true);
     const total = scenarioData.length;
-    const TICK_MS = 140;        // per-step draw speed
-    const PAUSE_MS = opts?.suppressVoice ? 600 : 1200;
-    const VOICE_LEAD_MS = opts?.suppressVoice ? 0 : 650;
-    const SUMMARY_MS = 2600;    // room for the per-scenario summary voice
+    let TICK_MS = 140;
+    let PAUSE_MS = 600;
+    const VOICE_LEAD_MS = 0;
 
-    const scenarioKeys = ["Base Case", "Retire Later", "Spend Less", "Stress Return"] as const;
-    const summarize = (line: number): string => {
-      const key = scenarioKeys[line];
-      let depletion: number | null = null;
-      for (let i = 1; i < scenarioData.length; i++) {
-        const prev = scenarioData[i - 1][key] as number;
-        const cur = scenarioData[i][key] as number;
-        if (prev > 0 && cur <= 0) {
-          depletion = scenarioData[i].age;
-          break;
-        }
-      }
-      if (depletion !== null) {
-        return `Funds run out at age ${depletion}.`;
-      }
-      const last = scenarioData[scenarioData.length - 1][key] as number;
-      if (last >= 1_000_000) {
-        const m = (last / 1_000_000).toFixed(1);
-        return `Balance at age one hundred, ${m} million dollars.`;
-      }
-      const k = Math.round(last / 1000);
-      return `Balance at age one hundred, ${k} thousand dollars.`;
-    };
+    if (opts?.durationBudgetMs) {
+      const lines = 4;
+      const pauseTotal = 400 * lines;
+      const drawBudget = Math.max(1200, opts.durationBudgetMs - pauseTotal);
+      TICK_MS = Math.max(35, Math.floor(drawBudget / (total * lines)));
+      PAUSE_MS = 400;
+    }
 
     const startLine = (line: number) => {
       if (line >= 4) {
@@ -400,9 +415,8 @@ export default function FinCastSelfDemo() {
         return;
       }
       currentLineRef.current = line;
-      if (!opts?.suppressVoice) speak(scenarioVoiceLabels[line]);
       setTimeout(() => {
-        if (currentLineRef.current !== line) return; // cancelled
+        if (currentLineRef.current !== line) return;
         animTimerRef.current = setInterval(() => {
           lineCountsRef.current[line]++;
           const next: [number, number, number, number] = [...lineCountsRef.current] as [number, number, number, number];
@@ -410,17 +424,10 @@ export default function FinCastSelfDemo() {
           if (lineCountsRef.current[line] >= total) {
             clearInterval(animTimerRef.current!);
             animTimerRef.current = null;
-            // Announce this scenario's outcome, then pause before next scenario
-            if (!opts?.suppressVoice) {
-              setTimeout(() => {
-                if (currentLineRef.current !== line) return;
-                speak(summarize(line));
-              }, 200);
-            }
             setTimeout(() => {
               if (currentLineRef.current !== line) return;
               startLine(line + 1);
-            }, PAUSE_MS + (opts?.suppressVoice ? 0 : SUMMARY_MS));
+            }, PAUSE_MS);
           }
         }, TICK_MS);
       }, VOICE_LEAD_MS);
@@ -429,9 +436,12 @@ export default function FinCastSelfDemo() {
     startLine(0);
   };
 
+  handleRunRef.current = handleRun;
+
   const handleReset = () => {
     if (animTimerRef.current) clearInterval(animTimerRef.current);
-    window.speechSynthesis?.cancel?.();
+    stopDemoAudio();
+    if (audioRef.current) audioRef.current.currentTime = 0;
     currentLineRef.current = -1;
     setHasRun(false);
     setLineCounts([0, 0, 0, 0]);
@@ -455,7 +465,7 @@ export default function FinCastSelfDemo() {
   }, [ageNow, retireAge, currentSavings, annualContributions, annualReturn, retirementSpending, ssIncome, otherRetirementIncome, inflation]);
 
   const handlePrint = () => {
-    window.speechSynthesis?.cancel?.();
+    stopDemoAudio();
     const previousTitle = document.title;
     document.title = "FinCast Reva — Self-Demo";
     const restoreTitle = () => {
@@ -478,7 +488,8 @@ export default function FinCastSelfDemo() {
   }, []);
 
   useEffect(() => {
-    const updatePointer = () => {
+    const updatePointer = (stepOverride?: number) => {
+      const step = stepOverride ?? demoStep;
       const targets: (HTMLElement | null)[] = [
         hookCardRef.current,
         inputsCardRef.current,
@@ -486,21 +497,22 @@ export default function FinCastSelfDemo() {
         scenariosCardRef.current,
         printBtnRef.current,
       ];
-      const el = targets[demoStep];
+      const el = targets[step];
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      // Anchor pointer tip near the top-left of the target with a small offset
       const top = Math.max(60, rect.top + 18);
       const left = Math.max(20, rect.left - 28);
       setPointerPos({ top, left });
     };
+    updatePointerRef.current = (step: number) => updatePointer(step);
     updatePointer();
-    window.addEventListener("resize", updatePointer);
-    window.addEventListener("scroll", updatePointer, { passive: true });
-    const id = window.setTimeout(updatePointer, 50);
+    const onLayout = () => updatePointer();
+    window.addEventListener("resize", onLayout);
+    window.addEventListener("scroll", onLayout, { passive: true });
+    const id = window.setTimeout(() => updatePointer(), 50);
     return () => {
-      window.removeEventListener("resize", updatePointer);
-      window.removeEventListener("scroll", updatePointer);
+      window.removeEventListener("resize", onLayout);
+      window.removeEventListener("scroll", onLayout);
       window.clearTimeout(id);
     };
   }, [demoStep, hasRun, scriptOpen]);
@@ -657,7 +669,7 @@ export default function FinCastSelfDemo() {
         <motion.div
           className="fincast-demo-pointer fixed z-50 text-slate-900 pointer-events-none"
           animate={{ top: pointerPos.top, left: pointerPos.left }}
-          transition={{ duration: 0.9 }}
+          transition={{ duration: isAutoPlaying ? 0.28 : 0.9, ease: "easeOut" }}
         >
           <div className="relative">
             <MousePointer2 className="w-10 h-10 drop-shadow-lg" />
