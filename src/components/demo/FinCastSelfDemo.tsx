@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import CalendlyBookTrigger from "@/components/booking/CalendlyBookTrigger";
 
+const INPUT_FIELD_HOVER_CLASS =
+  "relative z-0 rounded-xl transition-all duration-200 ease-out origin-right hover:z-10 hover:scale-105 hover:shadow-md";
+
 const DEMO_AUDIO_SRC = "/audio/demo/demo-2.wav";
 const DEMO_AUDIO_REFERENCE_DURATION = 59.016;
 
@@ -835,13 +838,15 @@ export default function FinCastSelfDemo() {
                 <div className="space-y-1.5">
                   <label className="grid grid-cols-[1fr_150px] gap-3 items-center">
                     <span className="text-sm font-medium text-slate-600">Client name</span>
-                    <Input
-                      className="rounded-xl"
-                      type="text"
-                      placeholder="e.g. J. Smith"
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                    />
+                    <div className={INPUT_FIELD_HOVER_CLASS}>
+                      <Input
+                        className="rounded-xl"
+                        type="text"
+                        placeholder="e.g. J. Smith"
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                      />
+                    </div>
                   </label>
                   <p className="text-xs text-slate-400 text-right pr-0.5">
                     PDF only — never saved or stored
@@ -1416,8 +1421,8 @@ function InputRow({ label, value, setValue, prefix = "" }: {
   return (
     <label className="grid grid-cols-[1fr_150px] gap-3 items-center">
       <span className="text-sm font-medium text-slate-600">{label}</span>
-      <div className="relative">
-        {prefix && <span className="absolute left-3 top-2.5 text-slate-400">{prefix}</span>}
+      <div className={INPUT_FIELD_HOVER_CLASS}>
+        {prefix && <span className="absolute left-3 top-2.5 z-10 text-slate-400">{prefix}</span>}
         <Input
           className={`rounded-xl ${prefix ? "pl-7" : ""}`}
           type="number"
