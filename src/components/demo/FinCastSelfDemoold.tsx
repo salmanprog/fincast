@@ -15,50 +15,6 @@ import {
   AlertTriangle, Calendar, TrendingDown, TrendingUp, ShieldCheck,
   RefreshCw, MousePointer2, Printer, ChevronDown, ChevronUp, BookOpen, Play,
 } from "lucide-react";
-import CalendlyBookTrigger from "@/components/booking/CalendlyBookTrigger";
-
-const DEMO_AUDIO_SRC = "/audio/demo/demo-2.wav";
-const DEMO_AUDIO_REFERENCE_DURATION = 59.016;
-
-/**
- * When each demo step begins — derived from silence gaps in demo-autdio.mp3.
- * Step 3 (index 3) = Scenario Conversation starts ~37.6s when chart narration ends.
- * Step 4 (index 4) = Advisor CTA starts ~46.3s after conversation ends.
- */
-const DEMO_AUDIO_STEP_TIMES = [0, 10.69, 22.59, 37.35, 46.31];
-
-/** Per-step lead — step 3 (→ scenarios card) nudged earlier for 3→4 transition */
-const DEMO_AUDIO_STEP_LEAD_SEC = [0, 0.08, 0.08, 0.08, 0.8, 0.8];
-
-function buildStepMarkers(duration: number, stepCount: number): number[] {
-  const scale = duration / DEMO_AUDIO_REFERENCE_DURATION;
-  return DEMO_AUDIO_STEP_TIMES.slice(0, stepCount).map((time) => time * scale);
-}
-
-function resolveDemoStep(currentTime: number, markers: number[]): number {
-  let step = 0;
-  for (let i = markers.length - 1; i >= 0; i--) {
-    const lead = DEMO_AUDIO_STEP_LEAD_SEC[i] ?? 0.08;
-    const threshold = i === 0 ? 0 : Math.max(0, markers[i] - lead);
-    if (currentTime >= threshold) {
-      step = i;
-      break;
-    }
-  }
-  return step;
-}
-
-function waitForDemoAudioReady(audio: HTMLAudioElement): Promise<void> {
-  if (audio.readyState >= 1 && Number.isFinite(audio.duration) && audio.duration > 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const done = () => resolve();
-    audio.addEventListener("loadedmetadata", done, { once: true });
-    audio.addEventListener("canplaythrough", done, { once: true });
-    audio.load();
-  });
-}
 
 export default function FinCastSelfDemo() {
   const [demoStep, setDemoStep] = useState(0);
@@ -70,7 +26,6 @@ export default function FinCastSelfDemo() {
   const lineCountsRef = useRef<[number, number, number, number]>([0, 0, 0, 0]);
   const currentLineRef = useRef(0);
   const mountedRef = useRef(false);
-  const [printPortalRoot, setPrintPortalRoot] = useState<HTMLElement | null>(null);
 
   const hookCardRef = useRef<HTMLDivElement | null>(null);
   const resultCardRef = useRef<HTMLDivElement | null>(null);
@@ -80,15 +35,7 @@ export default function FinCastSelfDemo() {
   const [pointerPos, setPointerPos] = useState<{ top: number; left: number }>({ top: 90, left: 90 });
   const isAutoPlayingRef = useRef(false);
   useEffect(() => { isAutoPlayingRef.current = isAutoPlaying; }, [isAutoPlaying]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const stepMarkersRef = useRef<number[]>(buildStepMarkers(DEMO_AUDIO_REFERENCE_DURATION, 5));
-  const lastSyncedStepRef = useRef(-1);
-  const step2ChartStartedRef = useRef(false);
-  const syncDemoStepRef = useRef<(time: number) => void>(() => {});
-  const endOfDemoPdfFlowRef = useRef<() => void>(() => {});
-  const handleRunRef = useRef<(opts?: { onComplete?: () => void; durationBudgetMs?: number }) => void>(() => {});
-  const updatePointerRef = useRef<(step: number) => void>(() => {});
-  const [isPaused, setIsPaused] = useState(false);
+  const spokenStepRef = useRef<number>(-1);
 
   const narrationSteps = [
     {
@@ -114,175 +61,113 @@ export default function FinCastSelfDemo() {
   ];
 
   const nextStep = () => setDemoStep((s) => (s + 1) % narrationSteps.length);
-
-  const stopDemoAudio = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.pause();
-  };
-
-  const playDemoAudio = async (fromStart = false) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (fromStart) audio.currentTime = 0;
-    try {
-      await audio.play();
-    } catch {
-      /* autoplay may be blocked until user gesture */
-    }
-  };
-
-  const startAutoDemo = async () => {
-    if (animTimerRef.current) clearInterval(animTimerRef.current);
-    stopDemoAudio();
-    lastSyncedStepRef.current = -1;
-    step2ChartStartedRef.current = false;
+  const startAutoDemo = () => {
+    window?.speechSynthesis?.cancel?.();
+    spokenStepRef.current = -1;
     setDemoStep(0);
-    setIsPaused(false);
     setIsAutoPlaying(true);
-    isAutoPlayingRef.current = true;
-
-    const audio = audioRef.current;
-    if (audio) {
-      await waitForDemoAudioReady(audio);
-      if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        stepMarkersRef.current = buildStepMarkers(audio.duration, narrationSteps.length);
-      }
-    }
-
-    void playDemoAudio(true);
   };
-
-  const resumeAutoDemo = () => {
-    if (animTimerRef.current) clearInterval(animTimerRef.current);
-    setIsPaused(false);
-    setIsAutoPlaying(true);
-    isAutoPlayingRef.current = true;
-
-    const audio = audioRef.current;
-    if (audio) {
-      lastSyncedStepRef.current = -1;
-      syncDemoStepRef.current(audio.currentTime);
-    }
-
-    void playDemoAudio(false);
-  };
-
   const stopAutoDemo = () => {
-    if (animTimerRef.current) clearInterval(animTimerRef.current);
-    stopDemoAudio();
-    setIsPaused(true);
+    window?.speechSynthesis?.cancel?.();
     setIsAutoPlaying(false);
-    isAutoPlayingRef.current = false;
   };
-
-  const endOfDemoPdfFlow = () => {
-    setIsAutoPlaying(false);
-    setIsPaused(false);
-    isAutoPlayingRef.current = false;
-    stopDemoAudio();
-
-    const openPrint = () => {
-      try {
-        const previousTitle = document.title;
-        document.title = "FinCast Reva — Self-Demo";
-        const restoreTitle = () => {
-          document.title = previousTitle;
-          window.removeEventListener("afterprint", restoreTitle);
-        };
-        window.addEventListener("afterprint", restoreTitle);
-        window.print();
-      } catch {
-        /* ignore */
-      }
-    };
-
-    setTimeout(openPrint, 1200);
-  };
-
-  endOfDemoPdfFlowRef.current = endOfDemoPdfFlow;
-
-  const syncDemoStepToAudio = (currentTime: number) => {
-    if (!isAutoPlayingRef.current) return;
-
-    const audio = audioRef.current;
-    const markers = stepMarkersRef.current;
-    const step = resolveDemoStep(currentTime, markers);
-
-    if (step !== lastSyncedStepRef.current) {
-      lastSyncedStepRef.current = step;
-
-      if (step === 2 && !step2ChartStartedRef.current) {
-        step2ChartStartedRef.current = true;
-        const stepStart = markers[2] ?? 0;
-        const stepEnd = markers[3] ?? audio?.duration ?? DEMO_AUDIO_REFERENCE_DURATION;
-        const budgetMs = Math.max(3000, (stepEnd - stepStart) * 1000);
-        handleRunRef.current({ durationBudgetMs: budgetMs, onComplete: () => {} });
-      }
-
-      setDemoStep(step);
-      updatePointerRef.current(step);
-    }
-  };
-
-  syncDemoStepRef.current = syncDemoStepToAudio;
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    // Avoid re-speaking the same step when only isAutoPlaying toggled
+    if (spokenStepRef.current === demoStep) return;
+    spokenStepRef.current = demoStep;
+    window.speechSynthesis.cancel();
 
-    const audio = new Audio(DEMO_AUDIO_SRC);
-    audio.preload = "auto";
-    audioRef.current = audio;
-
-    const refreshMarkers = () => {
-      if (audio.duration && Number.isFinite(audio.duration)) {
-        stepMarkersRef.current = buildStepMarkers(audio.duration, narrationSteps.length);
-      }
-    };
-
-    const onTimeUpdate = () => {
-      syncDemoStepRef.current(audio.currentTime);
-    };
-
-    const onEnded = () => {
+    const advance = () => {
       if (!isAutoPlayingRef.current) return;
-      endOfDemoPdfFlowRef.current();
+      setTimeout(() => {
+        if (!isAutoPlayingRef.current) return;
+        // Use the ref (not setDemoStep updater) so React strict-mode double
+        // invocation cannot trigger the PDF intro twice.
+        if (spokenStepRef.current >= narrationSteps.length - 1) {
+          endOfDemoPdfFlow();
+        } else {
+          setDemoStep((s) => Math.min(s + 1, narrationSteps.length - 1));
+        }
+      }, 1400);
     };
 
-    audio.addEventListener("loadedmetadata", refreshMarkers);
-    audio.addEventListener("durationchange", refreshMarkers);
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("ended", onEnded);
-    refreshMarkers();
-
-    return () => {
-      audio.pause();
-      audio.removeEventListener("loadedmetadata", refreshMarkers);
-      audio.removeEventListener("durationchange", refreshMarkers);
-      audio.removeEventListener("timeupdate", onTimeUpdate);
-      audio.removeEventListener("ended", onEnded);
-      audio.src = "";
-      audioRef.current = null;
-    };
-    // narrationSteps.length is static
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!isAutoPlaying) return;
-
-    let rafId = 0;
-    const tick = () => {
-      const audio = audioRef.current;
-      if (audio && isAutoPlayingRef.current && !audio.paused) {
-        syncDemoStepRef.current(audio.currentTime);
+    const endOfDemoPdfFlow = () => {
+      setIsAutoPlaying(false);
+      isAutoPlayingRef.current = false;
+      const openPrint = () => {
+        try {
+          window?.speechSynthesis?.cancel?.();
+          window.print();
+        } catch { /* ignore */ }
+      };
+      try {
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const intro = new SpeechSynthesisUtterance(
+          "Here is your one-page client summary from FinCast Reva, ready to save as a PDF."
+        );
+        intro.rate = 0.72;
+        intro.pitch = 0.96;
+        intro.volume = 0.9;
+        const voices = synth.getVoices();
+        const preferred = voices.find((v) =>
+          v.name.includes("Serena") ||
+          v.name.includes("Samantha") ||
+          v.name.includes("Karen") ||
+          v.name.includes("Moira") ||
+          v.name.includes("Tessa") ||
+          v.name.includes("Google UK English Female") ||
+          v.name.includes("Google US English Female")
+        );
+        if (preferred) intro.voice = preferred;
+        let opened = false;
+        const openOnce = () => {
+          if (opened) return;
+          opened = true;
+          setTimeout(openPrint, 400);
+        };
+        intro.onend = openOnce;
+        intro.onerror = openOnce;
+        setTimeout(() => {
+          try { synth.resume(); } catch { /* ignore */ }
+          synth.speak(intro);
+        }, 600);
+        // Safety net in case onend never fires
+        setTimeout(openOnce, 8000);
+      } catch {
+        setTimeout(openPrint, 1200);
       }
-      rafId = window.requestAnimationFrame(tick);
     };
 
-    rafId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(rafId);
-  }, [isAutoPlaying]);
+    const utterance = new SpeechSynthesisUtterance(narrationSteps[demoStep].voice);
+    utterance.rate = 0.68;
+    utterance.pitch = 0.96;
+    utterance.volume = 0.86;
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find((v) =>
+      v.name.includes("Serena") ||
+      v.name.includes("Samantha") ||
+      v.name.includes("Karen") ||
+      v.name.includes("Moira") ||
+      v.name.includes("Tessa") ||
+      v.name.includes("Google UK English Female") ||
+      v.name.includes("Google US English Female")
+    );
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    // Step 2 = "Instant Projection": skip the long narration and let the
+    // per-scenario voice ("Base case", "Retire later", "Spend less",
+    // "Stress return") speak in lockstep with each curve as it draws.
+    if (isAutoPlaying && demoStep === 2) {
+      handleRun({ onComplete: advance });
+      return;
+    }
+
+    utterance.onend = advance;
+    window.speechSynthesis.speak(utterance);
+  }, [demoStep, isAutoPlaying]);
 
   const [clientName, setClientName] = useState("");
 
@@ -389,25 +274,64 @@ export default function FinCastSelfDemo() {
   const riskTone = projection.depletionAge ? "text-amber-700" : "text-emerald-700";
   const currency = (value: number) => `$${Number(value || 0).toLocaleString()}`;
 
-  const handleRun = (opts?: { onComplete?: () => void; durationBudgetMs?: number }) => {
+  const scenarioVoiceLabels = [
+    "Base case",
+    "Retire later",
+    "Spend less",
+    "Stress return",
+  ];
+
+  const speak = (text: string) => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      synth.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.95;
+      utter.pitch = 1;
+      utter.volume = 1;
+      synth.speak(utter);
+    } catch { /* ignore */ }
+  };
+
+  const handleRun = (opts?: { onComplete?: () => void; suppressVoice?: boolean }) => {
     if (animTimerRef.current) clearInterval(animTimerRef.current);
+    // Don't cancel speech when the parent narration is providing voice already
+    if (!opts?.suppressVoice) window.speechSynthesis?.cancel?.();
     const fresh: [number, number, number, number] = [0, 0, 0, 0];
     lineCountsRef.current = [...fresh] as [number, number, number, number];
     currentLineRef.current = 0;
     setLineCounts(fresh);
     setHasRun(true);
     const total = scenarioData.length;
-    let TICK_MS = 140;
-    let PAUSE_MS = 600;
-    const VOICE_LEAD_MS = 0;
+    const TICK_MS = 140;        // per-step draw speed
+    const PAUSE_MS = opts?.suppressVoice ? 600 : 1200;
+    const VOICE_LEAD_MS = opts?.suppressVoice ? 0 : 650;
+    const SUMMARY_MS = 2600;    // room for the per-scenario summary voice
 
-    if (opts?.durationBudgetMs) {
-      const lines = 4;
-      const pauseTotal = 400 * lines;
-      const drawBudget = Math.max(1200, opts.durationBudgetMs - pauseTotal);
-      TICK_MS = Math.max(35, Math.floor(drawBudget / (total * lines)));
-      PAUSE_MS = 400;
-    }
+    const scenarioKeys = ["Base Case", "Retire Later", "Spend Less", "Stress Return"] as const;
+    const summarize = (line: number): string => {
+      const key = scenarioKeys[line];
+      let depletion: number | null = null;
+      for (let i = 1; i < scenarioData.length; i++) {
+        const prev = scenarioData[i - 1][key] as number;
+        const cur = scenarioData[i][key] as number;
+        if (prev > 0 && cur <= 0) {
+          depletion = scenarioData[i].age;
+          break;
+        }
+      }
+      if (depletion !== null) {
+        return `Funds run out at age ${depletion}.`;
+      }
+      const last = scenarioData[scenarioData.length - 1][key] as number;
+      if (last >= 1_000_000) {
+        const m = (last / 1_000_000).toFixed(1);
+        return `Balance at age one hundred, ${m} million dollars.`;
+      }
+      const k = Math.round(last / 1000);
+      return `Balance at age one hundred, ${k} thousand dollars.`;
+    };
 
     const startLine = (line: number) => {
       if (line >= 4) {
@@ -415,8 +339,9 @@ export default function FinCastSelfDemo() {
         return;
       }
       currentLineRef.current = line;
+      if (!opts?.suppressVoice) speak(scenarioVoiceLabels[line]);
       setTimeout(() => {
-        if (currentLineRef.current !== line) return;
+        if (currentLineRef.current !== line) return; // cancelled
         animTimerRef.current = setInterval(() => {
           lineCountsRef.current[line]++;
           const next: [number, number, number, number] = [...lineCountsRef.current] as [number, number, number, number];
@@ -424,10 +349,17 @@ export default function FinCastSelfDemo() {
           if (lineCountsRef.current[line] >= total) {
             clearInterval(animTimerRef.current!);
             animTimerRef.current = null;
+            // Announce this scenario's outcome, then pause before next scenario
+            if (!opts?.suppressVoice) {
+              setTimeout(() => {
+                if (currentLineRef.current !== line) return;
+                speak(summarize(line));
+              }, 200);
+            }
             setTimeout(() => {
               if (currentLineRef.current !== line) return;
               startLine(line + 1);
-            }, PAUSE_MS);
+            }, PAUSE_MS + (opts?.suppressVoice ? 0 : SUMMARY_MS));
           }
         }, TICK_MS);
       }, VOICE_LEAD_MS);
@@ -436,12 +368,9 @@ export default function FinCastSelfDemo() {
     startLine(0);
   };
 
-  handleRunRef.current = handleRun;
-
   const handleReset = () => {
     if (animTimerRef.current) clearInterval(animTimerRef.current);
-    stopDemoAudio();
-    if (audioRef.current) audioRef.current.currentTime = 0;
+    window.speechSynthesis?.cancel?.();
     currentLineRef.current = -1;
     setHasRun(false);
     setLineCounts([0, 0, 0, 0]);
@@ -465,31 +394,12 @@ export default function FinCastSelfDemo() {
   }, [ageNow, retireAge, currentSavings, annualContributions, annualReturn, retirementSpending, ssIncome, otherRetirementIncome, inflation]);
 
   const handlePrint = () => {
-    stopDemoAudio();
-    const previousTitle = document.title;
-    document.title = "FinCast Reva — Self-Demo";
-    const restoreTitle = () => {
-      document.title = previousTitle;
-      window.removeEventListener("afterprint", restoreTitle);
-    };
-    window.addEventListener("afterprint", restoreTitle);
+    window.speechSynthesis?.cancel?.();
     window.print();
   };
 
   useEffect(() => {
-    setPrintPortalRoot(document.body);
-    document.body.classList.add("fincast-demo-active");
-    const previousTitle = document.title;
-    document.title = "FinCast Reva — Self-Demo";
-    return () => {
-      document.body.classList.remove("fincast-demo-active");
-      document.title = previousTitle;
-    };
-  }, []);
-
-  useEffect(() => {
-    const updatePointer = (stepOverride?: number) => {
-      const step = stepOverride ?? demoStep;
+    const updatePointer = () => {
       const targets: (HTMLElement | null)[] = [
         hookCardRef.current,
         inputsCardRef.current,
@@ -497,22 +407,21 @@ export default function FinCastSelfDemo() {
         scenariosCardRef.current,
         printBtnRef.current,
       ];
-      const el = targets[step];
+      const el = targets[demoStep];
       if (!el) return;
       const rect = el.getBoundingClientRect();
+      // Anchor pointer tip near the top-left of the target with a small offset
       const top = Math.max(60, rect.top + 18);
       const left = Math.max(20, rect.left - 28);
       setPointerPos({ top, left });
     };
-    updatePointerRef.current = (step: number) => updatePointer(step);
     updatePointer();
-    const onLayout = () => updatePointer();
-    window.addEventListener("resize", onLayout);
-    window.addEventListener("scroll", onLayout, { passive: true });
-    const id = window.setTimeout(() => updatePointer(), 50);
+    window.addEventListener("resize", updatePointer);
+    window.addEventListener("scroll", updatePointer, { passive: true });
+    const id = window.setTimeout(updatePointer, 50);
     return () => {
-      window.removeEventListener("resize", onLayout);
-      window.removeEventListener("scroll", onLayout);
+      window.removeEventListener("resize", updatePointer);
+      window.removeEventListener("scroll", updatePointer);
       window.clearTimeout(id);
     };
   }, [demoStep, hasRun, scriptOpen]);
@@ -521,155 +430,39 @@ export default function FinCastSelfDemo() {
 
   return (
     <>
-      {/* PRINT-ONLY SUMMARY (portal → body so print CSS can show it) */}
-      {printPortalRoot &&
-        createPortal(
-          <div id="fincast-print-summary" aria-hidden="true">
-            <PrintSummary
-              clientName={clientName}
-              ageNow={ageNow}
-              retireAge={retireAge}
-              currentSavings={currentSavings}
-              annualContributions={annualContributions}
-              annualReturn={annualReturn}
-              retirementSpending={retirementSpending}
-              ssIncome={ssIncome}
-              otherRetirementIncome={otherRetirementIncome}
-              inflation={inflation}
-              projection={projection}
-              scenarioData={scenarioData}
-              resultMessage={resultMessage}
-              today={today}
-            />
-          </div>,
-          printPortalRoot
-        )}
+      {/* ── PRINT-ONLY ONE-PAGE SUMMARY (portal → body so print CSS can show it) ── */}
+      {createPortal(
+        <div
+          id="fincast-print-summary"
+          style={{ display: "none" }}
+          aria-hidden="true"
+        >
+          <PrintSummary
+            clientName={clientName}
+            ageNow={ageNow}
+            retireAge={retireAge}
+            currentSavings={currentSavings}
+            annualContributions={annualContributions}
+            annualReturn={annualReturn}
+            retirementSpending={retirementSpending}
+            ssIncome={ssIncome}
+            otherRetirementIncome={otherRetirementIncome}
+            inflation={inflation}
+            projection={projection}
+            scenarioData={scenarioData}
+            resultMessage={resultMessage}
+            today={today}
+          />
+        </div>,
+        document.body
+      )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        body.fincast-demo-active #fincast-print-summary {
-          position: absolute;
-          left: -99999px;
-          top: 0;
-          width: 1px;
-          height: 1px;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-        }
-        @media print {
-          body.fincast-demo-active > *:not(#fincast-print-summary) {
-            display: none !important;
-          }
-          body.fincast-demo-active #fincast-print-summary {
-            display: block !important;
-            position: static !important;
-            left: auto !important;
-            width: 100% !important;
-            height: auto !important;
-            overflow: visible !important;
-            clip: auto !important;
-            white-space: normal !important;
-            margin: 0 !important;
-            padding: 0.25in !important;
-            background: #fff !important;
-            font-family: Arial, Helvetica, sans-serif !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          body.fincast-demo-active #fincast-print-summary * {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          body.fincast-demo-active #fincast-print-summary .recharts-cartesian-axis-tick-value,
-          body.fincast-demo-active #fincast-print-summary .recharts-text {
-            font-family: Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            fill: #000000 !important;
-          }
-          body.fincast-demo-active #fincast-print-summary .fincast-print-disclaimer {
-            font-weight: 400 !important;
-          }
-          .fincast-print-talking-point {
-            display: block !important;
-          }
-          .fincast-print-page-1,
-          .fincast-print-page-2 {
-            position: relative;
-            min-height: 7.25in;
-            box-sizing: border-box;
-          }
-          .fincast-print-page-2 {
-            page-break-before: always;
-            break-before: page;
-            padding-top: 0;
-            font-size: 12.5px;
-            color: #2d2d2d;
-            line-height: 1.45;
-          }
-          .fincast-print-browser-footer--block {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 9px;
-            color: #5f6368;
-            line-height: 1.35;
-          }
-          .fincast-print-browser-header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: baseline;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 9px;
-            color: #5f6368;
-            line-height: 1.35;
-          }
-          .fincast-print-browser-date {
-            justify-self: start;
-            grid-column: 1;
-          }
-          .fincast-print-browser-title {
-            justify-self: center;
-            grid-column: 2;
-            text-align: center;
-          }
-          .fincast-print-browser-footer--split {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 9px;
-            color: #5f6368;
-            line-height: 1.35;
-          }
-          .fincast-print-page-2-body {
-            padding-top: 18px;
-          }
-          .fincast-print-browser-footer-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-          }
-          @page { size: letter landscape; margin: 0.25in; }
-        }
-      `}} />
-
-      {/* MAIN APP — hidden when printing; PDF uses PrintSummary only */}
-      <div id="fincast-demo-screen">
+      {/* ── MAIN APP ────────────────────────────────────────────────────── */}
       <div className="min-h-screen bg-slate-50 text-slate-950 p-4 md:p-8 relative overflow-hidden">
         <motion.div
-          className="fincast-demo-pointer fixed z-50 text-slate-900 pointer-events-none"
+          className="fixed z-50 text-slate-900 pointer-events-none"
           animate={{ top: pointerPos.top, left: pointerPos.left }}
-          transition={{ duration: isAutoPlaying ? 0.28 : 0.9, ease: "easeOut" }}
+          transition={{ duration: 0.9 }}
         >
           <div className="relative">
             <MousePointer2 className="w-10 h-10 drop-shadow-lg" />
@@ -688,7 +481,7 @@ export default function FinCastSelfDemo() {
             transition={{ duration: 0.5 }}
             className="grid lg:grid-cols-[0.77fr_1.23fr] gap-6 items-stretch"
           >
-            <Card ref={hookCardRef} className={`fincast-demo-card rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 0 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={hookCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 0 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-7 md:p-10 space-y-6">
                 <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">
                   <ShieldCheck className="w-4 h-4" /> FinCast Reva RIA Self-Demo
@@ -727,15 +520,9 @@ export default function FinCastSelfDemo() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {isPaused ? (
-                    <Button onClick={resumeAutoDemo} className="rounded-2xl px-6 py-6 text-base">
-                      Resume Narrated Demo
-                    </Button>
-                  ) : (
-                    <Button onClick={startAutoDemo} className="rounded-2xl px-6 py-6 text-base">
-                      Start Auto Narrated Demo
-                    </Button>
-                  )}
+                  <Button onClick={startAutoDemo} className="rounded-2xl px-6 py-6 text-base">
+                    Start Auto Narrated Demo
+                  </Button>
                   <Button onClick={nextStep} variant="outline" className="rounded-2xl px-6 py-6 text-base">
                     Next Step
                   </Button>
@@ -751,7 +538,7 @@ export default function FinCastSelfDemo() {
               </CardContent>
             </Card>
 
-            <Card ref={resultCardRef} className={`fincast-demo-card fincast-demo-result-card rounded-2xl shadow-sm border-slate-200 bg-white overflow-hidden ${demoStep === 2 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={resultCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white overflow-hidden ${demoStep === 2 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-6 md:p-8 space-y-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -766,18 +553,18 @@ export default function FinCastSelfDemo() {
                 </div>
 
                 {!hasRun ? (
-                  <div className="fincast-demo-result-chart h-[48rem] w-full flex flex-col items-center justify-center gap-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50">
+                  <div className="h-[48rem] w-full flex flex-col items-center justify-center gap-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50">
                     <TrendingUp className="w-12 h-12 text-slate-300" />
                     <div className="text-center">
                       <div className="text-base font-semibold text-slate-600">Ready to project</div>
                       <div className="text-sm text-slate-400 mt-1">Set your assumptions, then run</div>
                     </div>
-                    <Button onClick={() => handleRun()} className="rounded-2xl px-8 py-6 text-base gap-2">
+                    <Button onClick={() => handleRun()} size="lg" className="rounded-2xl px-8 gap-2">
                       <Play className="w-4 h-4" /> Run Projection
                     </Button>
                   </div>
                 ) : (
-                  <div className="fincast-demo-result-chart h-[48rem] w-full relative">
+                  <div className="h-[48rem] w-full relative">
                     {!animating && (
                       <button
                         onClick={() => handleRun()}
@@ -817,8 +604,8 @@ export default function FinCastSelfDemo() {
             </Card>
           </motion.div>
 
-          <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-6 mb-6">
-            <Card ref={inputsCardRef} className={`fincast-demo-card rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 1 ? "ring-4 ring-slate-300" : ""}`}>
+          <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-6">
+            <Card ref={inputsCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 1 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-semibold">Client Inputs</h2>
@@ -865,7 +652,7 @@ export default function FinCastSelfDemo() {
               </CardContent>
             </Card>
 
-            <Card ref={scenariosCardRef} className={`fincast-demo-card rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 3 || demoStep === 4 ? "ring-4 ring-slate-300" : ""}`}>
+            <Card ref={scenariosCardRef} className={`rounded-2xl shadow-sm border-slate-200 bg-white ${demoStep === 3 || demoStep === 4 ? "ring-4 ring-slate-300" : ""}`}>
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div>
                   <h2 className="text-2xl md:text-3xl font-semibold">Scenario Conversation</h2>
@@ -898,17 +685,17 @@ export default function FinCastSelfDemo() {
                     <div className="text-2xl font-semibold">See how FinCast Reva works in a client meeting.</div>
                     <p className="text-slate-300 mt-1">Book a 15-minute advisor walkthrough.</p>
                   </div>
-                  <CalendlyBookTrigger className="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-6 text-base bg-white text-slate-950 hover:bg-slate-100">
+                  <Button className="rounded-2xl px-6 py-6 text-base bg-white text-slate-950 hover:bg-slate-100">
                     <Calendar className="w-4 h-4 mr-2" /> Book Walkthrough
-                  </CalendlyBookTrigger>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           </div>
         </div>
 
-        {/* ADVISOR MEETING SCRIPT */}
-        <div className="fincast-demo-card max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* ── ADVISOR MEETING SCRIPT ─────────────────────────────────────── */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <button
             onClick={() => setScriptOpen((v) => !v)}
             className="w-full flex items-center justify-between px-7 py-5 hover:bg-slate-50 transition"
@@ -941,7 +728,7 @@ export default function FinCastSelfDemo() {
               </div>
 
               {MEETING_SCRIPT.map((step, i) => (
-                <div key={i} className="fincast-demo-card grid md:grid-cols-[220px_1fr] gap-4">
+                <div key={i} className="grid md:grid-cols-[220px_1fr] gap-4">
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 mb-2">
                       Step {i + 1}
@@ -983,8 +770,6 @@ export default function FinCastSelfDemo() {
               </div>
             </div>
           )}
-        </div>
-
         </div>
 
       </div>
@@ -1056,123 +841,7 @@ const OBJECTIONS = [
   },
 ];
 
-// Print summary component
-
-const PRINT_DOC_TITLE = "FinCast Reva — Self-Demo";
-const PRINT_DOC_URL = "https://build-freedom.ai/app";
-
-/** Neutral print palette — matches browser PDF (black/grey), not slate UI colors */
-const PRINT_COLOR = {
-  black: "#000000",
-  body: "#2d2d2d",
-  section: "#2d2d2d",
-  label: "#2d2d2d",
-  meta: "#4d4d4d",
-  muted: "#808080",
-  disclaimer: "#555555",
-  risk: "#b45309",
-  riskHeading: "#b45309",
-  border: "#dddddd",
-  grid: "#cccccc",
-  axis: "#333333",
-} as const;
-
-function formatPrintTimestamp(d: Date) {
-  return d.toLocaleString("en-US", {
-    month: "numeric",
-    day: "numeric",
-    year: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function PrintBrowserChrome({
-  page,
-  totalPages,
-  layout,
-}: {
-  page: number;
-  totalPages: number;
-  layout: "footer-block" | "split";
-}) {
-  const printedAt = formatPrintTimestamp(new Date());
-
-  if (layout === "split") {
-    return (
-      <>
-        <div className="fincast-print-browser-header" aria-hidden="true">
-          <span className="fincast-print-browser-date">{printedAt}</span>
-          <span className="fincast-print-browser-title">{PRINT_DOC_TITLE}</span>
-        </div>
-        <div className="fincast-print-browser-footer fincast-print-browser-footer--split" aria-hidden="true">
-          <span>{PRINT_DOC_URL}</span>
-          <span>{page}/{totalPages}</span>
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <div className="fincast-print-browser-footer fincast-print-browser-footer--block" aria-hidden="true">
-      <div className="fincast-print-browser-footer-row">
-        <span>{printedAt}</span>
-        <span>{PRINT_DOC_TITLE}</span>
-      </div>
-      <div className="fincast-print-browser-footer-row">
-        <span>{PRINT_DOC_URL}</span>
-        <span>{page}/{totalPages}</span>
-      </div>
-    </div>
-  );
-}
-
-function formatPrintCurrency(v: number): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  const abs = Math.abs(n);
-  if (abs >= 1e15) return `$${(n / 1e15).toFixed(1)}Q`;
-  if (abs >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  return `$${n.toLocaleString()}`;
-}
-
-function formatPrintPlainNumber(v: number, maxDigits = 10): string {
-  const s = String(Math.round(Number(v)));
-  if (!Number.isFinite(Number(v))) return "—";
-  if (s.length <= maxDigits) return s;
-  return `${s.slice(0, maxDigits - 1)}…`;
-}
-
-function formatChartAxisValue(v: number): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "$0";
-  const abs = Math.abs(n);
-  if (abs >= 1e15) return `$${(n / 1e15).toFixed(1)}Q`;
-  if (abs >= 1e12) return `$${(n / 1e12).toFixed(1)}T`;
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  if (abs >= 1000) return `$${Math.round(n / 1000)}k`;
-  return `$${Math.round(n)}`;
-}
-
-function maxScenarioBalance(
-  data: { "Base Case": number; "Retire Later": number; "Spend Less": number; "Stress Return": number }[]
-): number {
-  let max = 0;
-  for (const row of data) {
-    max = Math.max(
-      max,
-      row["Base Case"] ?? 0,
-      row["Retire Later"] ?? 0,
-      row["Spend Less"] ?? 0,
-      row["Stress Return"] ?? 0,
-    );
-  }
-  return max;
-}
+// ── Print summary component ───────────────────────────────────────────────────
 
 function PrintSummary({
   clientName, ageNow, retireAge, currentSavings, annualContributions, annualReturn,
@@ -1185,86 +854,62 @@ function PrintSummary({
   scenarioData: { age: number; "Base Case": number; "Retire Later": number; "Spend Less": number; "Stress Return": number }[];
   resultMessage: string; today: string;
 }) {
-  const fmt = formatPrintCurrency;
+  const fmt = (v: number) => `$${Number(v).toLocaleString()}`;
   const isRisk = !!projection.depletionAge;
-  const chartMax = maxScenarioBalance(scenarioData);
-  const yAxisLabel = formatChartAxisValue(chartMax);
-  const yAxisWidth = Math.min(88, Math.max(52, yAxisLabel.length * 6.5 + 10));
 
   const inputs = [
-    { label: "Current Age", value: formatPrintPlainNumber(ageNow) },
-    { label: "Retirement Age", value: formatPrintPlainNumber(retireAge) },
+    { label: "Current Age", value: `${ageNow}` },
+    { label: "Retirement Age", value: `${retireAge}` },
     { label: "Portfolio Savings", value: fmt(currentSavings) },
     { label: "Pre-retirement Contributions", value: fmt(annualContributions) },
-    { label: "Annual Return", value: `${formatPrintPlainNumber(annualReturn, 6)}%` },
+    { label: "Annual Return", value: `${annualReturn}%` },
     { label: "Retirement Spending", value: fmt(retirementSpending) },
     { label: "SS / Retirement Income", value: fmt(ssIncome) },
     { label: "Other Retirement Income", value: fmt(otherRetirementIncome) },
-    { label: "Spending Inflation", value: `${formatPrintPlainNumber(inflation, 6)}%` },
+    { label: "Spending Inflation", value: `${inflation}%` },
   ];
-
-  const printValueCellStyle: React.CSSProperties = {
-    padding: "4px 0",
-    fontWeight: 700,
-    textAlign: "right",
-    color: PRINT_COLOR.black,
-    maxWidth: 0,
-    width: "42%",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  };
-
-  const printLabelCellStyle: React.CSSProperties = {
-    padding: "4px 0",
-    color: PRINT_COLOR.label,
-    fontWeight: 400,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="fincast-print-page-1">
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: PRINT_COLOR.black, letterSpacing: "-0.5px" }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", letterSpacing: "-0.5px" }}>
             FinCast Reva — Retirement Projection Summary{clientName ? `: ${clientName}` : ""}
           </div>
-          <div style={{ fontSize: 13, color: PRINT_COLOR.meta, marginTop: 4, fontWeight: 400 }}>
+          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
             Prepared {today} · For advisor use only · Not a guarantee of future results
           </div>
-          <div style={{ fontSize: 11, color: PRINT_COLOR.muted, marginTop: 2, fontWeight: 400 }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
             No client data was saved or retained in the preparation of this document.
           </div>
         </div>
         <div style={{
-          color: isRisk ? PRINT_COLOR.risk : "#15803d",
-          fontWeight: 700,
+          padding: "6px 14px",
+          borderRadius: 999,
+          background: isRisk ? "#fef3c7" : "#d1fae5",
+          color: isRisk ? "#92400e" : "#065f46",
+          fontWeight: 600,
           fontSize: 13,
-          background: "transparent",
-          whiteSpace: "nowrap",
         }}>
           {isRisk ? "⚠ Depletion Risk" : "✓ On Track"}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 14 }}>
         {/* Left column: inputs + talking points */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {/* Inputs table */}
-          <div style={{ minWidth: 0, overflow: "hidden" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLOR.section, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
               Client Assumptions
             </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, tableLayout: "fixed" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
               <tbody>
                 {inputs.map(({ label, value }) => (
-                  <tr key={label} style={{ borderBottom: `1px solid ${PRINT_COLOR.border}` }}>
-                    <td style={printLabelCellStyle}>{label}</td>
-                    <td style={printValueCellStyle} title={value}>{value}</td>
+                  <tr key={label} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "4px 0", color: "#64748b" }}>{label}</td>
+                    <td style={{ padding: "4px 0", fontWeight: 600, textAlign: "right", color: "#0f172a" }}>{value}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1278,14 +923,14 @@ function PrintSummary({
             borderRadius: 8,
             padding: "10px 12px",
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: isRisk ? PRINT_COLOR.riskHeading : "#166534", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: isRisk ? "#92400e" : "#166534", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Projection Outcome
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: isRisk ? PRINT_COLOR.risk : "#15803d", lineHeight: 1.35 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: isRisk ? "#b45309" : "#15803d", lineHeight: 1.35 }}>
               {resultMessage}
             </div>
             {!isRisk && projection.finalBalance > 0 && (
-              <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fmt(projection.finalBalance)}>
+              <div style={{ fontSize: 11, color: "#16a34a", marginTop: 4 }}>
                 Est. balance at age 100: {fmt(projection.finalBalance)}
               </div>
             )}
@@ -1293,7 +938,7 @@ function PrintSummary({
 
           {/* Talking points */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLOR.section, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
               Advisor Talking Points
             </div>
             {[
@@ -1301,52 +946,47 @@ function PrintSummary({
               isRisk
                 ? `At the current pace, savings may be exhausted around age ${projection.depletionAge}. Adjusting retirement age, spending, or return assumptions can significantly change the outlook.`
                 : "Based on these assumptions, the portfolio is projected to remain positive. Stress-testing scenarios helps clients understand the margin of safety.",
+              "Small changes — retiring 1-2 years later or reducing annual spending by 5-10% — can meaningfully extend portfolio life.",
             ].map((point, i) => (
-              <div key={i} className="fincast-print-talking-point" style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 12.5, color: PRINT_COLOR.body, lineHeight: 1.45, fontWeight: 400 }}>
-                <span style={{ color: PRINT_COLOR.body, flexShrink: 0, marginTop: 1 }}>•</span>
+              <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 12.5, color: "#334155", lineHeight: 1.45 }}>
+                <span style={{ color: "#94a3b8", flexShrink: 0, marginTop: 1 }}>•</span>
                 <span>{point}</span>
               </div>
             ))}
-            <div className="fincast-print-talking-point" style={{ display: "flex", gap: 6, marginBottom: 6, fontSize: 12.5, color: PRINT_COLOR.body, lineHeight: 1.45, fontWeight: 400 }}>
-              <span style={{ color: PRINT_COLOR.body, flexShrink: 0, marginTop: 1 }}>•</span>
-              <span>
-                Small changes — retiring 1-2 years later or reducing annual spending by 5-10% — can
-              </span>
-            </div>
           </div>
         </div>
 
         {/* Right column: chart */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0, overflow: "hidden" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: PRINT_COLOR.section, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Projected Portfolio Balance — All Scenarios (Age {ageNow}–100)
           </div>
-          <div style={{ overflow: "hidden" }}>
+          <div>
             <LineChart
               width={820}
               height={420}
               data={scenarioData}
-              margin={{ top: 8, right: 12, left: 0, bottom: 4 }}
+              margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke={PRINT_COLOR.grid} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
               <XAxis
                 dataKey="age"
                 type="number"
                 domain={[ageNow, 100]}
                 ticks={[60, 65, 70, 75, 80, 85, 90, 95, 100]}
-                tick={{ fontSize: 15, fill: PRINT_COLOR.black, fontWeight: "bold" }}
+                tick={{ fontSize: 15, fill: "#0f172a", fontWeight: 600 }}
                 tickMargin={4}
-                stroke={PRINT_COLOR.axis}
+                stroke="#475569"
                 height={32}
               />
               <YAxis
-                tickFormatter={formatChartAxisValue}
-                tick={{ fontSize: 13, fill: PRINT_COLOR.black, fontWeight: "bold" }}
-                tickMargin={4}
-                stroke={PRINT_COLOR.axis}
-                width={yAxisWidth}
+                tickFormatter={(v) => `$${Math.round(v / 1000)}k`}
+                tick={{ fontSize: 15, fill: "#0f172a", fontWeight: 600 }}
+                tickMargin={8}
+                stroke="#475569"
+                width={68}
               />
-              <ReferenceLine x={retireAge} stroke={PRINT_COLOR.axis} strokeDasharray="4 4" strokeWidth={2} label={{ value: "Retire", fontSize: 15, fill: PRINT_COLOR.black, fontWeight: "bold" }} />
+              <ReferenceLine x={retireAge} stroke="#475569" strokeDasharray="4 4" strokeWidth={2} label={{ value: "Retire", fontSize: 15, fill: "#0f172a", fontWeight: 700 }} />
               <Line type="monotone" dataKey="Base Case"     stroke="#1e3a8a" strokeWidth={4} dot={false} isAnimationActive={false} />
               <Line type="monotone" dataKey="Retire Later"  stroke="#047857" strokeWidth={3} dot={false} strokeDasharray="8 4" isAnimationActive={false} />
               <Line type="monotone" dataKey="Spend Less"    stroke="#6d28d9" strokeWidth={3} dot={false} strokeDasharray="8 4" isAnimationActive={false} />
@@ -1359,8 +999,8 @@ function PrintSummary({
             gap: "8px 20px",
             paddingTop: 12,
             fontSize: 14,
-            fontWeight: 700,
-            color: PRINT_COLOR.black,
+            fontWeight: 600,
+            color: "#0f172a",
           }}>
             {[
               { label: `Base Case ($${(retirementSpending/1000).toFixed(0)}k/yr spend)`, color: "#1e3a8a", dashed: false },
@@ -1381,34 +1021,22 @@ function PrintSummary({
               </div>
             ))}
           </div>
-          <div className="fincast-print-disclaimer" style={{
+          <div style={{
             fontSize: 10.5,
-            color: PRINT_COLOR.disclaimer,
-            borderTop: `1px solid ${PRINT_COLOR.border}`,
+            color: "#94a3b8",
+            borderTop: "1px solid #e2e8f0",
             paddingTop: 6,
             lineHeight: 1.45,
-            fontWeight: 400,
           }}>
             This projection is based on the assumptions entered above and uses a straight-line return model. It does not account for taxes, investment fees, or income sources beyond those entered. This document is for illustrative and discussion purposes only and does not constitute financial advice. Past performance is not indicative of future results.
           </div>
-        </div>
-      </div>
-
-      <PrintBrowserChrome page={1} totalPages={2} layout="footer-block" />
-      </div>
-
-      {/* Page 2 — bullet continuation (matches original 2-page PDF) */}
-      <div className="fincast-print-page-2">
-        <PrintBrowserChrome page={2} totalPages={2} layout="split" />
-        <div className="fincast-print-page-2-body" style={{ fontWeight: 400, color: PRINT_COLOR.body }}>
-          meaningfully extend portfolio life.
         </div>
       </div>
     </div>
   );
 }
 
-// Sub-components
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function InputRow({ label, value, setValue, prefix = "" }: {
   label: string; value: number; setValue: (v: number) => void; prefix?: string;
@@ -1449,7 +1077,7 @@ function ScenarioCard({ title, body, action }: { title: string; body: string; ac
   return (
     <button
       onClick={action}
-      className="fincast-demo-card text-left rounded-2xl border border-slate-200 p-5 hover:bg-slate-50 transition"
+      className="text-left rounded-2xl border border-slate-200 p-5 hover:bg-slate-50 transition"
     >
       <div className="font-semibold text-lg">{title}</div>
       <p className="text-sm text-slate-600 mt-2">{body}</p>
