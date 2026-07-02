@@ -1,8 +1,99 @@
 "use client";
 
+import type { ForecastYearRow } from "@/lib/forecastCalculator";
 import type { ForecastDetail } from "./forecastReportTypes";
 import { formatForecastCurrency, formatForecastDateOnly } from "./forecastReportUtils";
 import ForecastDepletionChart from "./ForecastDepletionChart";
+
+const SUMMARY_COMPACT_THRESHOLD = 1_000_000;
+const CHART_LOG_MIN = 1_000_000;
+const CHART_LOG_RATIO = 100;
+
+type SummaryAmount = {
+  display: string;
+  full: string;
+  compact: boolean;
+};
+
+function formatSummaryAmount(value: number): SummaryAmount {
+  const safe = Number.isFinite(value) ? value : 0;
+  const full = formatForecastCurrency(safe);
+
+  if (Math.abs(safe) >= SUMMARY_COMPACT_THRESHOLD) {
+    const display = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      notation: "compact",
+      maximumFractionDigits: Math.abs(safe) >= 1_000_000_000 ? 2 : 1,
+    }).format(safe);
+
+    return { display, full, compact: true };
+  }
+
+  return { display: full, full, compact: false };
+}
+
+function rowsForChartDisplay(rows: ForecastYearRow[]): {
+  rows: ForecastYearRow[];
+  logScale: boolean;
+} {
+  const positives = rows
+    .map((row) => row.endingBalance)
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (positives.length === 0) {
+    return { rows, logScale: false };
+  }
+
+  const maxBalance = Math.max(...positives);
+  const minPositive = Math.min(...positives);
+  const useLog =
+    maxBalance > CHART_LOG_MIN && maxBalance / minPositive > CHART_LOG_RATIO;
+
+  if (!useLog) {
+    return { rows, logScale: false };
+  }
+
+  return {
+    logScale: true,
+    rows: rows.map((row) => {
+      const balance = row.endingBalance;
+      if (!Number.isFinite(balance) || balance <= 0) {
+        return { ...row, endingBalance: 0 };
+      }
+
+      // Chart plots endingBalance / 1000 on Y-axis — use log10(balance) so all years stay visible.
+      const logThousands = Math.log10(balance);
+      return {
+        ...row,
+        endingBalance: logThousands * 1000,
+      };
+    }),
+  };
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  const amount = formatSummaryAmount(value);
+
+  return (
+    <div className="flex min-w-0 flex-col rounded-xl border border-gray-200 bg-gradient-to-br from-white to-gray-50/90 px-4 py-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+      <p
+        className="mt-2 truncate text-xl font-bold leading-tight tabular-nums tracking-tight text-gray-900 sm:text-2xl"
+        title={amount.full}
+      >
+        {amount.display}
+      </p>
+      {amount.compact ? (
+        <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+          Hover for exact amount
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export default function ForecastDetailReport({
   detail,
@@ -16,6 +107,7 @@ export default function ForecastDetailReport({
   const totalInvestmentGain = rows.reduce((sum, row) => sum + row.investmentGain, 0);
   const totalSources = rows.reduce((sum, row) => sum + row.totalSources, 0);
   const totalUses = rows.reduce((sum, row) => sum + row.totalUses, 0);
+  const { rows: chartRows, logScale: chartLogScale } = rowsForChartDisplay(rows);
 
   return (
     <div className="forecast-report space-y-6 bg-white text-gray-900">
@@ -65,42 +157,22 @@ export default function ForecastDetailReport({
           </div>
 
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Final ending balance
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900">
-                {formatForecastCurrency(finalEndingBalance)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Total investment gain
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900">
-                {formatForecastCurrency(totalInvestmentGain)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Total sources
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900">
-                {formatForecastCurrency(totalSources)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                Total uses
-              </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-gray-900">
-                {formatForecastCurrency(totalUses)}
-              </p>
-            </div>
+            <SummaryStat label="Final ending balance" value={finalEndingBalance} />
+            <SummaryStat label="Total investment gain" value={totalInvestmentGain} />
+            <SummaryStat label="Total sources" value={totalSources} />
+            <SummaryStat label="Total uses" value={totalUses} />
           </div>
 
+          {chartLogScale ? (
+            <p className="mb-3 text-xs text-gray-500">
+              Chart Y-axis uses a logarithmic scale (log₁₀ of ending balance) so
+              early and late years are both visible. See the table below for exact
+              dollar amounts.
+            </p>
+          ) : null}
+
           <ForecastDepletionChart
-            rows={rows}
+            rows={chartRows}
             yearCount={detail.forecastYears}
             exportMode={exportMode}
           />
