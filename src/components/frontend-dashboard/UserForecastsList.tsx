@@ -84,7 +84,7 @@ export default function UserForecastsList() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Saved forecasts for your account.{" "}
           <Link
-            href="/admin/forecasts/new"
+            href="/dashboard/forecasts/new"
             className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
           >
             New forecast

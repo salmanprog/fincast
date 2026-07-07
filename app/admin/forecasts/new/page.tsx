@@ -454,7 +454,7 @@ export default function ForecastNewPage() {
           >
             <FieldGrid>
               <div>
-                <Label htmlFor="annual-lasting-funds">Annual lasting funds / annual income</Label>
+                <Label htmlFor="annual-lasting-funds">Sources of Lasting Funds </Label>
                 <Input
                   id="annual-lasting-funds"
                   type="number"
@@ -503,7 +503,7 @@ export default function ForecastNewPage() {
           <FormSection title="Expenses / uses" description="Living expenses and one-time uses of funds.">
             <FieldGrid>
               <div className="md:col-span-2">
-                <Label htmlFor="recurring-expenses">Recurring living expenses amount per year</Label>
+                <Label htmlFor="recurring-expenses">Recurring living expenses annual</Label>
                 <Input
                   id="recurring-expenses"
                   type="text"

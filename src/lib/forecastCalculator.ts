@@ -94,11 +94,11 @@ export function getOneTimePurchaseTotal(
 
 export function calculateForecast(input: ForecastInput): ForecastYearRow[] {
   const forecastYears = Math.max(0, Math.floor(input.forecastYears));
-  const roiRate = input.returnOnInvestmentRate;
-  const inflationRate = input.costOfLivingInflationRate;
-  const incomeGrowthRate = input.incomeGrowthRate;
-  const realEstateRate = input.realEstateAppreciationRate;
-  const withdrawalTaxRate = input.withdrawalTaxRate;
+  const roiRate = input.returnOnInvestmentRate / 100;
+  const inflationRate = input.costOfLivingInflationRate / 100;
+  const incomeGrowthRate = input.incomeGrowthRate / 100;
+  const realEstateRate = input.realEstateAppreciationRate / 100;
+  const withdrawalTaxRate = input.withdrawalTaxRate / 100;
 
   const results: ForecastYearRow[] = [];
 
