@@ -20,7 +20,7 @@ export default function ForecastViewPage() {
     <div className="w-full min-w-0 max-w-full space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white/90">View forecast</h2>
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-white/90">View forecastsss</h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             <Link
               href="/admin/forecasts"

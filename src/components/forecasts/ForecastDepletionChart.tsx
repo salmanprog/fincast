@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   CartesianGrid,
-  LabelList,
+  Legend,
   Line,
   LineChart,
   ReferenceLine,
@@ -12,18 +12,29 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { ForecastYearRow } from "@/lib/forecastCalculator";
+import {
+  calculateForecast,
+  type ForecastInput,
+  type ForecastYearRow,
+} from "@/lib/forecastCalculator";
 import { formatForecastCurrency } from "./forecastReportUtils";
 
 const EXPORT_CHART_WIDTH = 900;
 const EXPORT_CHART_HEIGHT = 400;
 
-type ChartPoint = {
-  year: number;
-  age: number;
-  endingBalance: number;
-  endingBalanceInThousands: number;
-};
+type ScenarioKey = "baseCase" | "lowerReturn" | "higherSpending" | "improvedPlan";
+
+const CHART_SCENARIOS: {
+  key: ScenarioKey;
+  label: string;
+  stroke: string;
+  strokeDasharray?: string;
+}[] = [
+  { key: "baseCase", label: "Base case", stroke: "#2563eb" },
+  { key: "lowerReturn", label: "Lower return", stroke: "#dc2626", strokeDasharray: "8 4" },
+  { key: "higherSpending", label: "Higher spending", stroke: "#f97316", strokeDasharray: "8 4" },
+  { key: "improvedPlan", label: "Improved plan", stroke: "#16a34a", strokeDasharray: "8 4" },
+];
 
 type ForecastDepletionChartProps = {
   rows: ForecastYearRow[];
@@ -32,46 +43,195 @@ type ForecastDepletionChartProps = {
   exportMode?: boolean;
 };
 
+function getChartCurrentAge(input: ForecastInput): number {
+  return Math.max(1, Math.floor(input.retirementAge - input.forecastYears + 1));
+}
+
+function reconstructForecastInput(rows: ForecastYearRow[], yearCount: number): ForecastInput | null {
+  if (rows.length === 0) return null;
+
+  const first = rows[0];
+  const second = rows[1];
+  const retirementAge = first.age;
+
+  const returnOnInvestmentRate =
+    first.beginningBalance > 0 ? (first.investmentGain / first.beginningBalance) * 100 : 0;
+
+  const costOfLivingInflationRate =
+    second && first.recurringExpenses > 0
+      ? ((second.recurringExpenses / first.recurringExpenses) - 1) * 100
+      : 3;
+
+  const incomeGrowthRate =
+    second && first.lastingFunds > 0 ? ((second.lastingFunds / first.lastingFunds) - 1) * 100 : 3;
+
+  const inflationDecimal = costOfLivingInflationRate / 100;
+  const recurringExpensesPerYear =
+    inflationDecimal > 0
+      ? first.recurringExpenses / (1 + inflationDecimal)
+      : first.recurringExpenses;
+
+  const realEstateAppreciationRate =
+    second && first.realEstateValue > 0
+      ? ((second.realEstateValue / first.realEstateValue) - 1) * 100
+      : 0;
+
+  const withdrawalTaxRate =
+    first.totalUses > 0 && first.netFlowBeforeTax < 0
+      ? (first.withdrawalTax / first.totalUses) * 100
+      : 0;
+
+  const purchases = rows
+    .filter((row) => row.oneTimePurchases > 0)
+    .map((row) => ({
+      description: "",
+      year: row.yearNumber,
+      amount: row.oneTimePurchases,
+    }))
+    .slice(0, 2);
+
+  return {
+    forecastYears: yearCount,
+    beginningBalance: first.beginningBalance,
+    totalRealEstateValue: first.realEstateValue ?? 0,
+    annualLastingFunds: first.lastingFunds,
+    recurringExpensesPerYear,
+    retirementAge,
+    returnOnInvestmentRate,
+    costOfLivingInflationRate,
+    incomeGrowthRate,
+    realEstateAppreciationRate,
+    withdrawalTaxRate,
+    source1: {
+      amountPerYear: first.source1Amount,
+      beginningYear: 1,
+      endingYear: yearCount,
+    },
+    source2: {
+      amountPerYear: first.source2Amount,
+      beginningYear: 1,
+      endingYear: yearCount,
+    },
+    purchases,
+  };
+}
+
+function modifyScenarioPayload(base: ForecastInput, key: ScenarioKey): ForecastInput {
+  switch (key) {
+    case "lowerReturn":
+      return {
+        ...base,
+        returnOnInvestmentRate: Math.max(base.returnOnInvestmentRate - 1, 0.1),
+      };
+    case "higherSpending":
+      return {
+        ...base,
+        recurringExpensesPerYear: base.recurringExpensesPerYear + 13000,
+      };
+    case "improvedPlan":
+      return {
+        ...base,
+        returnOnInvestmentRate: base.returnOnInvestmentRate + 1.2,
+        recurringExpensesPerYear: Math.max(base.recurringExpensesPerYear - 6000, 0),
+        costOfLivingInflationRate: Math.max(base.costOfLivingInflationRate - 0.8, 0),
+      };
+    default:
+      return base;
+  }
+}
+
+/** Accumulate through retirement age; withdrawals begin only after retirement age. */
+function buildAccumulationBalances(
+  input: ForecastInput,
+  annualReturn: number
+): Map<number, number> {
+  const currentAge = getChartCurrentAge(input);
+  const retirementAge = input.retirementAge;
+  const balances = new Map<number, number>();
+  let balance = input.beginningBalance;
+  let contributions = input.annualLastingFunds;
+  const returnRate = annualReturn / 100;
+  const contributionGrowth = input.incomeGrowthRate / 100;
+
+  for (let age = currentAge; age <= retirementAge; age += 1) {
+    balances.set(age, Math.round(balance));
+    if (age < retirementAge) {
+      balance = balance * (1 + returnRate) + contributions;
+      contributions = contributions * (1 + contributionGrowth);
+    } else {
+      balance = balance * (1 + returnRate);
+      balances.set(age, Math.round(balance));
+    }
+  }
+
+  return balances;
+}
+
+function buildScenarioBalanceSeries(input: ForecastInput): Map<number, number> {
+  const accumulation = buildAccumulationBalances(input, input.returnOnInvestmentRate);
+  const peakBalance = accumulation.get(input.retirementAge) ?? input.beginningBalance;
+  const postRetirementRows = calculateForecast({
+    ...input,
+    beginningBalance: peakBalance,
+  });
+
+  const series = new Map<number, number>(accumulation);
+  for (const row of postRetirementRows) {
+    series.set(input.retirementAge + row.yearNumber, Math.round(row.endingBalance));
+  }
+  return series;
+}
+
+function buildFourCurveChartData(baseInput: ForecastInput) {
+  const seriesByScenario = CHART_SCENARIOS.map((scenario) => ({
+    ...scenario,
+    balances: buildScenarioBalanceSeries(modifyScenarioPayload(baseInput, scenario.key)),
+  }));
+
+  const ages = new Set<number>();
+  for (const scenario of seriesByScenario) {
+    scenario.balances.forEach((_balance, age) => ages.add(age));
+  }
+
+  return Array.from(ages)
+    .sort((a, b) => a - b)
+    .map((age) => {
+      const row: { age: number } & Record<ScenarioKey, number | null> = {
+        age,
+        baseCase: null,
+        lowerReturn: null,
+        higherSpending: null,
+        improvedPlan: null,
+      };
+      for (const scenario of seriesByScenario) {
+        row[scenario.key] = scenario.balances.get(age) ?? null;
+      }
+      return row;
+    });
+}
+
+function formatChartCurrency(value: number) {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000)}K`;
+  return `${sign}$${Math.round(abs)}`;
+}
+
 export default function ForecastDepletionChart({
   rows,
   yearCount,
   exportMode = false,
 }: ForecastDepletionChartProps) {
-  const chartData: ChartPoint[] = useMemo(
-    () =>
-      rows.map((row) => ({
-        year: row.yearNumber,
-        age: row.age,
-        endingBalance: row.endingBalance,
-        endingBalanceInThousands: Math.round(row.endingBalance / 1000),
-      })),
-    [rows]
-  );
+  const calcInput = useMemo(() => reconstructForecastInput(rows, yearCount), [rows, yearCount]);
 
-  const [showPointLabels, setShowPointLabels] = useState(false);
+  const chartData = useMemo(() => {
+    if (!calcInput) return [];
+    return buildFourCurveChartData(calcInput);
+  }, [calcInput]);
 
-  useEffect(() => {
-    if (exportMode) return;
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const update = () => {
-      const spacious = rows.length <= 36;
-      setShowPointLabels(mq.matches && spacious);
-    };
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, [rows.length, exportMode]);
-
-  const yDomain = useMemo((): [number, number] => {
-    if (chartData.length === 0) return [0, 1];
-    const vals = chartData.map((d) => d.endingBalanceInThousands);
-    const minVal = Math.min(...vals, 0);
-    const maxVal = Math.max(...vals, 0);
-    const span = Math.max(maxVal - minVal, 1);
-    const pad = Math.max(Math.ceil(span * 0.06), 1);
-    return [minVal - pad, maxVal + pad];
-  }, [chartData]);
-
+  const chartRetirementAge = calcInput?.retirementAge ?? 0;
+  const chartCurrentAge = calcInput ? getChartCurrentAge(calcInput) : 0;
   const labelYearTitle = yearCount === 1 ? "1 year" : `${yearCount} years`;
 
   const lineChart = (
@@ -79,41 +239,28 @@ export default function ForecastDepletionChart({
       width={exportMode ? EXPORT_CHART_WIDTH : undefined}
       height={exportMode ? EXPORT_CHART_HEIGHT : undefined}
       data={chartData}
-      margin={{ top: 36, right: 24, left: 8, bottom: 32 }}
+      margin={{ top: 12, right: exportMode ? 24 : 24, left: 8, bottom: exportMode ? 32 : 8 }}
     >
-      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
       <XAxis
         dataKey="age"
         type="number"
-        domain={["dataMin", "dataMax"]}
-        tick={{ fontSize: 11, fill: "#374151" }}
+        domain={chartData.length > 0 ? [chartCurrentAge, "dataMax"] : ["dataMin", "dataMax"]}
+        tick={{ fontSize: exportMode ? 11 : 12, fill: "#374151", fontWeight: 600 }}
         stroke="#9ca3af"
+        allowDecimals={false}
         label={{
           value: "Age",
           position: "insideBottom",
-          offset: -18,
+          offset: exportMode ? -18 : -4,
           style: { fontSize: 12, fontWeight: 600, fill: "#374151" },
         }}
-        allowDecimals={false}
       />
       <YAxis
-        dataKey="endingBalanceInThousands"
-        domain={yDomain}
-        type="number"
-        scale="linear"
-        tickCount={exportMode ? 6 : undefined}
-        allowDecimals={false}
-        tick={{ fontSize: 10, fill: "#374151" }}
+        tick={{ fontSize: exportMode ? 10 : 11, fill: "#374151" }}
         stroke="#9ca3af"
-        tickFormatter={(v) => String(v)}
+        tickFormatter={(v) => formatChartCurrency(Number(v))}
         width={72}
-        label={{
-          value: "Ending balance ($000)",
-          angle: -90,
-          position: "insideLeft",
-          offset: 10,
-          style: { fontSize: 10, fontWeight: 600, fill: "#374151", textAnchor: "middle" },
-        }}
       />
       {!exportMode ? (
         <Tooltip
@@ -125,61 +272,33 @@ export default function ForecastDepletionChart({
             backgroundColor: "rgba(255, 255, 255, 0.97)",
             fontSize: 12,
           }}
-          formatter={(_v, _name, item) => {
-            const payload = item?.payload as ChartPoint | undefined;
-            const bal = payload?.endingBalance ?? 0;
-            return [formatForecastCurrency(bal), "Ending Balance"];
-          }}
-          labelFormatter={(label) => `Age: ${label}`}
+          formatter={(value, name) => [formatForecastCurrency(Number(value)), name]}
+          labelFormatter={(label) => `Age ${label}`}
         />
       ) : null}
-      <ReferenceLine y={0} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} />
-      <Line
-        type="monotone"
-        dataKey="endingBalanceInThousands"
-        name="Ending balance"
-        stroke="#3b82f6"
+      <Legend />
+      <ReferenceLine
+        x={chartRetirementAge}
+        stroke="#475569"
+        strokeDasharray="4 4"
         strokeWidth={2}
-        isAnimationActive={!exportMode}
-        dot={{ r: 3.5, fill: "#3b82f6", strokeWidth: 0 }}
-        activeDot={exportMode ? false : { r: 6, strokeWidth: 2, stroke: "#fff", fill: "#3b82f6" }}
-        connectNulls
-      >
-        {showPointLabels && !exportMode ? (
-          <LabelList
-            dataKey="endingBalanceInThousands"
-            position="top"
-            offset={10}
-            content={(props) => {
-              const { x, y, value } = props as {
-                x?: number;
-                y?: number;
-                value?: number;
-              };
-              if (
-                x === undefined ||
-                y === undefined ||
-                value === undefined ||
-                typeof value !== "number"
-              ) {
-                return null;
-              }
-              return (
-                <text
-                  x={x}
-                  y={y - 8}
-                  fill="#475569"
-                  fontSize={10}
-                  fontWeight={600}
-                  textAnchor="middle"
-                >
-                  {value}
-                </text>
-              );
-            }}
-          />
-        ) : null}
-      </Line>
+        label={{ value: "Retire", fontSize: 12, fill: "#0f172a", fontWeight: 700 }}
+      />
+      <ReferenceLine y={0} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} />
+      {CHART_SCENARIOS.map((scenario) => (
+        <Line
+          key={scenario.key}
+          type="monotone"
+          dataKey={scenario.key}
+          name={scenario.label}
+          stroke={scenario.stroke}
+          strokeWidth={scenario.key === "baseCase" ? (exportMode ? 2 : 3) : 2}
+          strokeDasharray={scenario.strokeDasharray}
+          dot={false}
+          isAnimationActive={!exportMode}
+          connectNulls
+        />
+      ))}
     </LineChart>
   );
 
@@ -204,14 +323,15 @@ export default function ForecastDepletionChart({
             exportMode ? "text-gray-700" : "text-gray-700 dark:text-gray-200"
           }`}
         >
-          Depletion Chart
+          Retirement depletion forecast
         </p>
         <p
           className={`mx-auto mt-2 max-w-xl text-xs ${
             exportMode ? "text-gray-500" : "text-gray-500 dark:text-gray-400"
           }`}
         >
-          Ending balance by age (Y-axis in thousands of dollars). The dashed line is zero.
+          Four scenario curves from your forecast calculation. Balances accumulate through retirement
+          age; withdrawals begin after retirement. The dashed orange line is zero.
         </p>
       </div>
 
@@ -219,15 +339,17 @@ export default function ForecastDepletionChart({
         className={
           exportMode
             ? "text-gray-700"
-            : "h-[380px] w-full min-w-0 max-w-full text-gray-700 dark:text-gray-300 [&_.recharts-cartesian-axis-tick_text]:fill-current [&_.recharts-responsive-container]:!max-w-full"
+            : "h-[28rem] w-full min-w-0 max-w-full text-gray-700 dark:text-gray-300 [&_.recharts-cartesian-axis-tick_text]:fill-current [&_.recharts-responsive-container]:!max-w-full"
         }
         style={
           exportMode
             ? { width: EXPORT_CHART_WIDTH, height: EXPORT_CHART_HEIGHT }
-            : { height: 380 }
+            : undefined
         }
       >
-        {exportMode ? (
+        {chartData.length === 0 ? (
+          <p className="text-center text-sm text-gray-500">No chart data available.</p>
+        ) : exportMode ? (
           lineChart
         ) : (
           <ResponsiveContainer width="100%" height="100%" debounce={50}>

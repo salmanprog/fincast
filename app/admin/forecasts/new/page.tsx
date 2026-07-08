@@ -7,6 +7,7 @@ import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import TextArea from "@/components/form/input/TextArea";
 import Button from "@/components/ui/button/Button";
+import { Slider } from "@/components/ui/slider";
 import {
   calculateForecast,
   toNumber,
@@ -176,6 +177,7 @@ export default function ForecastNewPage() {
   const router = useRouter();
   const { user, loading: loadingUser, refreshUser } = useUser();
   const [formData, setFormData] = useState<FormDataState>(initialFormData);
+  const [preRetirementContributions, setPreRetirementContributions] = useState(35000);
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<"beginningBalance" | "forecastYears", string>>>({});
   const [forecastRows, setForecastRows] = useState<ForecastYearRow[]>([]);
@@ -429,6 +431,16 @@ export default function ForecastNewPage() {
                   placeholder="Enter retirement age"
                   value={formData.retirementAge}
                   onChange={(e) => handleChange("retirementAge", e.target.value)}
+                />
+              </div>
+              <div>
+              <Label htmlFor="pre-retirement-contributions">Pre-retirement contributions</Label>
+                <Slider
+                  value={[preRetirementContributions]}
+                  min={0}
+                  max={100000}
+                  step={1000}
+                  onValueChange={(v) => setPreRetirementContributions(v[0])}
                 />
               </div>
               <div style={{ display: "none" }}>

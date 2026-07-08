@@ -180,18 +180,6 @@ export default function ForecastsPage() {
                 isHeader
                 className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
               >
-                Risk
-              </TableCell>
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
-                Status
-              </TableCell>
-              <TableCell
-                isHeader
-                className="py-3 text-start text-theme-xs font-medium text-gray-500 dark:text-gray-400"
-              >
                 Actions
               </TableCell>
             </TableRow>
@@ -239,20 +227,6 @@ export default function ForecastsPage() {
                     </TableCell>
                     <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
                       {formatDateOnly(r.updatedAt)}
-                    </TableCell>
-                    <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
-                      <span className="font-medium text-gray-800 dark:text-white/90">{risk}</span>
-                    </TableCell>
-                    <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
-                      {status === "Complete" ? (
-                        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
-                          Complete
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800 dark:bg-orange-950/50 dark:text-orange-300">
-                          Processing
-                        </span>
-                      )}
                     </TableCell>
                     <TableCell className="py-3 text-theme-sm text-gray-600 dark:text-gray-400">
                       <div className="flex flex-wrap items-center gap-2">
