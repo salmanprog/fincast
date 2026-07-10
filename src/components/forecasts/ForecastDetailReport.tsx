@@ -182,9 +182,6 @@ export default function ForecastDetailReport({
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
-                    Year
-                  </th>
-                  <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
                     Age
                   </th>
                   <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
@@ -197,16 +194,7 @@ export default function ForecastDetailReport({
                     Lasting Funds
                   </th>
                   <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
-                    Source #1
-                  </th>
-                  <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
-                    Source #2
-                  </th>
-                  <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
                     Total Sources
-                  </th>
-                  <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
-                    Recurring Expenses
                   </th>
                   <th className="whitespace-nowrap px-2.5 py-2.5 font-semibold text-gray-800">
                     Total Uses
@@ -222,9 +210,6 @@ export default function ForecastDetailReport({
                     key={row.yearNumber}
                     className="border-b border-gray-100 odd:bg-white even:bg-gray-50/60"
                   >
-                    <td className="whitespace-nowrap px-2.5 py-2 font-medium tabular-nums text-gray-900">
-                      {row.yearNumber}
-                    </td>
                     <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">{row.age}</td>
                     <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
                       {formatForecastCurrency(row.beginningBalance)}
@@ -236,16 +221,7 @@ export default function ForecastDetailReport({
                       {formatForecastCurrency(row.lastingFunds)}
                     </td>
                     <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
-                      {formatForecastCurrency(row.source1Amount)}
-                    </td>
-                    <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
-                      {formatForecastCurrency(row.source2Amount)}
-                    </td>
-                    <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
                       {formatForecastCurrency(row.totalSources)}
-                    </td>
-                    <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
-                      {formatForecastCurrency(row.recurringExpenses)}
                     </td>
                     <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
                       {formatForecastCurrency(row.totalUses)}

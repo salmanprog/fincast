@@ -267,6 +267,8 @@ export default function ForecastNewPage() {
     }
 
     const results = calculateForecast(payloadForCalc);
+    // console.log("Forecast results:", results); 
+    // return;
     setForecastRows(results);
     const token =
       typeof window !== "undefined"
@@ -304,7 +306,11 @@ export default function ForecastNewPage() {
       await refreshUser();
       router.push("/admin/forecasts");
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Network error while saving forecast.");
+      let message = "Network error while saving forecast.";
+      if (e instanceof Error) {
+        message = e.message;
+      }
+      window.alert(message);
     } finally {
       setSaving(false);
     }
