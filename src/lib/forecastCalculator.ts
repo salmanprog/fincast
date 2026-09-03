@@ -48,6 +48,11 @@ export type ForecastYearRow = {
 };
 
 const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const customRound = (value: number) =>
+  value < 0 ? Math.floor(value) : Math.round(value);
+const makeNegative = (value: number) => -value;
+const roundPointValue = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
 
 /** Parse form / API values: strips commas and $, supports number passthrough. */
 export function toNumber(value: string | number | null | undefined): number {
@@ -103,64 +108,43 @@ export function calculateForecast(input: ForecastInput): ForecastYearRow[] {
   const results: ForecastYearRow[] = [];
 
   let balance = Number(input.beginningBalance || 0);
-  let lastingFunds = Number(input.annualLastingFunds || 0);
-  let recurringExpenses = Number(input.recurringExpensesPerYear || 0);
+  let annualLastingFunds = Number(input.annualLastingFunds || 0);
+  let recurringExpenses = makeNegative(Number(input.recurringExpensesPerYear || 0));
   let realEstateValue = Number(input.totalRealEstateValue || 0);
-  recurringExpenses = roundMoney((recurringExpenses * inflationRate) + recurringExpenses);
+
+  //recurringExpenses = roundMoney((recurringExpenses * inflationRate) + recurringExpenses);
   for (let yearNumber = 1; yearNumber <= forecastYears; yearNumber += 1) {
     const age = input.retirementAge + yearNumber -1;
-    // let linesource3 = lastingFunds * incomeGrowthRate;
-    // console.log("lastingFunds===========", lastingFunds);
-    // console.log("incomeGrowthRate===========", incomeGrowthRate);
-    // console.log("linesource3===========", linesource3);
+    let beginningBalance = balance;
+    let investmentGain = customRound(beginningBalance * roiRate);
+    let linesource3 = annualLastingFunds;
+    let sumSources = investmentGain + annualLastingFunds;
+    let usesExpenses = (recurringExpenses * inflationRate) + recurringExpenses;
+    let netFlowBeforeTax = sumSources + usesExpenses;
+    let withdrawalTax = netFlowBeforeTax < 0 ? withdrawalTaxRate * usesExpenses : 0;
+    let sumWithdrawalTax = withdrawalTax + netFlowBeforeTax;
     if (yearNumber > 1) {
-      lastingFunds = Math.round((lastingFunds * incomeGrowthRate) + lastingFunds);
-      recurringExpenses = roundMoney(recurringExpenses * (1 + inflationRate));
-      realEstateValue = roundMoney(realEstateValue * (1 + realEstateRate));
+      console.log("greater============================")
+      balance = beginningBalance + sumWithdrawalTax;
+      console.log("bgreateralance============================", balance);
+      balance = beginningBalance + sumWithdrawalTax;
+      investmentGain = customRound(beginningBalance * roiRate);
+      linesource3 = (annualLastingFunds * incomeGrowthRate) + annualLastingFunds;
+      sumSources = investmentGain + linesource3;
+      usesExpenses = (usesExpenses * inflationRate) + usesExpenses;
+      netFlowBeforeTax = sumSources + usesExpenses;
+      withdrawalTax = Math.trunc(netFlowBeforeTax < 0 ? withdrawalTaxRate * usesExpenses : 0);
+      sumWithdrawalTax = withdrawalTax + netFlowBeforeTax;
     }
-    
-    
-    const beginningBalance = Math.ceil(balance);
-    //console.log("beginningBalance===========", beginningBalance);
-    const source1AmountRaw = getTermSourceAmount(input.source1, yearNumber);
-    const source2AmountRaw = getTermSourceAmount(input.source2, yearNumber);
-    const source1Amount = roundMoney(source1AmountRaw);
-    const source2Amount = roundMoney(source2AmountRaw);
-    const oneTimePurchases = roundMoney(getOneTimePurchaseTotal(input.purchases, yearNumber));
-    
-    const investmentGain = Math.round(beginningBalance * roiRate);
-    //console.log("lastingFunds===========", lastingFunds);
-    const totalSources = roundMoney(investmentGain + lastingFunds + source1Amount + source2Amount);
-    const totalUses = Math.round(recurringExpenses + oneTimePurchases);
-    
-    //console.log("totalSources===========", totalSources);
-    const netFlowBeforeTax = totalSources - totalUses;
-    //console.log("netFlowBeforeTax===========", netFlowBeforeTax);
-    const withdrawalTax =
-      netFlowBeforeTax < 0 ? roundMoney(totalUses * withdrawalTaxRate) : 0;
-    const finalNetFlow = roundMoney(netFlowBeforeTax - withdrawalTax);
-    const endingBalance = roundMoney(beginningBalance + finalNetFlow);
-
-    results.push({
-      yearNumber,
-      age,
-      beginningBalance,
-      investmentGain,
-      lastingFunds: roundMoney(lastingFunds),
-      source1Amount,
-      source2Amount,
-      totalSources,
-      recurringExpenses: roundMoney(recurringExpenses),
-      oneTimePurchases,
-      totalUses,
-      netFlowBeforeTax,
-      withdrawalTax,
-      finalNetFlow,
-      endingBalance,
-      realEstateValue: roundMoney(realEstateValue),
-    });
-
-    balance = endingBalance;
+    console.log("balance============================", balance);
+    console.log("investmentGain============================", investmentGain);
+    console.log("linesource3============================", linesource3);
+    // console.log("sumSources============================", sumSources);
+    // console.log("usesExpenses============================", usesExpenses);
+    // console.log("netFlowBeforeTax============================", netFlowBeforeTax);
+    // console.log("withdrawalTax============================", withdrawalTax);
+    //console.log("sumWithdrawalTax============================", sumWithdrawalTax);
+  
   }
 
   return results;

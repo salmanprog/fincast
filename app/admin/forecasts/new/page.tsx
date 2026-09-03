@@ -267,8 +267,8 @@ export default function ForecastNewPage() {
     }
 
     const results = calculateForecast(payloadForCalc);
-    // console.log("Forecast results:", results); 
-    // return;
+     console.log("Forecast results:", results); 
+     return;
     setForecastRows(results);
     const token =
       typeof window !== "undefined"

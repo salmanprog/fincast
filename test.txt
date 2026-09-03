@@ -1,0 +1,287 @@
+F-11  Real credentials appear in a sample configuration file
+
+A file meant to be a harmless template, shared in the codebase, contains what appear to be genuine security keys — the kind used to protect login sessions.
+
+Why it matters:  If these match the values used in production, an attacker could forge valid login sessions. This needs to be confirmed directly.
+
+Answer: ex_react.txt file hai jo testing k liye banai gai thi usko hum delete karden gay
+
+F-13  Settings are stored per-visitor instead of centrally
+
+A setting used throughout the whole application is being saved into each individual visitor's temporary session instead of one shared, central location.
+
+Why it matters:  Changing a setting doesn't reach people already browsing the site, so updates appear to randomly fail to apply — and sensitive data, including the payment key, ends up copied unencrypted into thousands of individual session files.
+
+Answer: ye website ki baat kar raha hai haseeb reply this question
+
+F-25  Order processing has no safety net if something fails midway
+
+Placing an order involves eight separate steps, including two calls to outside services, but nothing rolls back the earlier steps if a later one fails.
+
+Why it matters:  Orders can end up partially recorded and out of sync with the payment processor's own records. A manual repair tool already exists for this — a sign it happens in practice.
+
+Answer: is point may haseeb api call ki baat kar raha ha tum jo order create k time multiple apis call kar rahay ho replay karo is ka tum 
+
+F-26  Several key admin forms accept data with no validation
+
+Ten sections of the admin area that save data — including transactions and waivers — perform no checks at all on what's submitted before saving it.
+
+Why it matters:  Unchecked, potentially malicious input can reach the database and outside services — this is part of how the price-manipulation issue (F-17) becomes possible.
+
+Answer: Admin Panel se kisi bhi kisam ki transaction,waiver submitting nahi ho rahi ap api routes aur controllers check karen waha sab apko validations mill jaye gi admin just shows a data admin panel koi aisa action perform nahi kar raha hai
+
+F-21  43 delete actions can be triggered just by loading a link
+
+Deleting records is handled through simple web links rather than protected actions, so the standard protection against cross-site tricks doesn't apply. One of these links even removes a whole database column.
+
+Why it matters:  Simply viewing a crafted link or image while logged in as an admin could silently delete records, and automated search-engine crawlers visiting admin pages could trigger this without any human involvement.
+
+Answer: Aisa jab ho sakta hai jab ap delete jo hai us ka Route GET karen tab hi ye action perform ho sakta hai aur hum apnay project may koi is kissam ka route bana kar delete action perform nahi karwa rahay check my dashboard route file proper laravel ki routing use ho rahi hai 
+
+F-38  Core business logic is duplicated across the codebase
+
+The system has no consistent, organized place for its business rules. Instead, similar logic has been copy-pasted across roughly twenty different sections of the code.
+
+Why it matters:  Fixing a bug in one place often leaves the same bug broken everywhere else — this is exactly how the account-takeover issue (F-15) went unnoticed for so long.
+
+Answer: admin panel may jo modules cabana,season-pass,sale creation wagera hain har ek ka different flow of scope for example creating k time product fetech ho kar arahay hai sab may GetAllProducts ki api call ho rahi hai lekin data ko filter kar k show kiya ja raha hai kisi may cabana category k product nahi dehkanay kisi may season-pass aur General category k dehkanay hain isi liye ap ko code duplicate lag raha hai lekin sab ki logic alag hai woh is liye karna para kiyon k thirparty api may aisa koi filter nahi tha k may category ki id ya slug send karo tu product filter ho kar ajaye ya may is liye mjay apnay code se filter karwa kar data show karna para
+
+F-39  Listing pages load far more data than they display
+
+Many "browse" screens in the admin area pull an entire table's worth of data into memory before trimming it down to the handful of rows actually shown.
+
+Why it matters:  These pages get slower and use more resources as the business grows, and will eventually stop working altogether once the data volume gets large enough.
+
+Answer: check my getData function on each controller pagination kuch is tarah se chall rahi hai $data = $query->offset($start)->limit($limit)->get();
+
+sirf required rows database se la rahi hai.
+Agar DataTables length = 10 bhej raha hai, to roughly 10 BirthdayPackages records load honge, na ke poori table.
+
+F-47  Large amounts of unnecessary, outdated files are served to the public
+
+Over 130 MB of images, scripts, and uploaded files sit in the public web folder, most of them unoptimized, some pointing at a broken external address.
+
+Why it matters:  Updates to the website can take up to a year to actually reach returning visitors due to caching settings, and any uploaded files would be lost permanently if the server were ever replaced.
+
+Answer: Jee han is may kuch files hain unko may remove kardonga.
+
+F-18  Login errors are shown on screen instead of being logged
+
+When something goes wrong during login, the system displays raw technical details to the visitor and stops immediately, instead of quietly recording the issue and recovering gracefully.
+
+Why it matters:  This can leak internal technical information to anyone who triggers a login error, and genuine problems go completely unrecorded, making them hard to diagnose.
+
+Answer: is main laravel login nahi Auth0 Login run ho raha hai 
+
+F-19  Logging in and out doesn't properly reset access
+
+When someone logs in, their session isn't refreshed with a new identifier, and "stay logged in" is switched on automatically for every administrator. Logging out doesn't fully close the session either.
+
+Why it matters:  This creates a risk that a stolen or observed session could be reused, and clicking "log out" doesn't guarantee access is actually revoked — a real concern since the portal is used from shared public terminals.
+
+Answer: ye sari chezain Auth0 aur third party api se handle ho rahi hai 
+
+F-20  The system accepts requests from any website on the internet
+
+A setting meant to restrict which outside websites can interact with the company's system has instead been left wide open to all of them.
+
+Why it matters:  Other websites could potentially trigger actions against the company's system on a visitor's behalf, though one remaining setting partly limits the damage this could cause.
+
+F-06  The application is missing standard organizational safeguards
+
+Structured components that most modern applications use to separate validation, permissions, and business logic are entirely absent here.
+
+Why it matters:  This is the underlying reason several other issues exist — checks, rules, and side effects are all mixed together in a way that makes mistakes more likely and harder to catch.
+
+Answer: waisay tu humnay laravel routing,Auth0 aur api k liye Authorization Token use kia hua hai laravel routing khud security deta hai lekin may pihr bhi isko aur check karlonga k hum security k liye aur kia kar saktay hain 
+
+F-03  An outdated deployment process has already caused a real outage
+
+Software components are installed from a large compressed file rather than a standard, verifiable process, and the server was found running an unsupported version of its core software.
+
+Why it matters:  This has already caused a confirmed outage in which the entire site returned errors for a period of time. Recovering from a failed update currently requires manually re-uploading files.
+
+Answer: Nahi aisa nahi hai Is ki poori deployment Git se hoti na k zip folder upload kia jata hai is ki poori history aur repository git per mojood hai ap check kar saktay hain 
+
+
+MEDIUM — 17 findings
+
+Misuse of the underlying technology creating credible risk of an outage, data corruption, incorrect behavior, or rising maintenance cost.
+
+F-24  File uploads aren't properly restricted
+
+Around thirty places in the code save uploaded files without properly checking what type of file they actually are, and one safeguard against harmful file types has a gap in it.
+
+Why it matters:  In some of the least-checked forms, this could allow a malicious file to be uploaded and run, or an image file to secretly carry harmful content.
+
+Answer: Jee is main validation lagani paray gi k sirf jpg,png upload hon ye hum karden gay
+
+F-28  Admin-editable content isn't safety-checked before display
+
+Many pieces of text that administrators can edit are displayed on screen without being checked for hidden malicious code first.
+
+Why it matters:  This creates an opening for malicious code to run inside the admin panel itself, and the practice is so widespread it's no longer clear which instances were deliberate and which were oversights.
+
+Answer: Jo code humne check kiya hai us mein description textarea ke andar edit ho rahi hai, directly browser mein HTML ke taur par execute nahi ho rahi. Summernote ki wajah se HTML intentionally allowed hai.
+
+F-23  User records can accidentally expose stored credentials
+
+Sensitive account fields — including access tokens and a secondary password — aren't hidden when user information is shared or displayed, and passwords aren't stored using the strongest available method.
+
+Why it matters:  Any feature that displays or exports user account details risks also exposing these hidden credentials.
+
+Answer: Admin Panel login k bina access nahi hai aur jo apis hain woh Authorization Token se hi data fetch kar k lati hain Aur after the login user object wagehra sab Auth0 aur third party Api data laker de rahi hain 
+
+F-22  Session tracking runs on every request, even where it shouldn't
+
+A feature meant only for regular browser page visits is instead applied across the whole system, including automated requests that shouldn't need a session at all.
+
+Why it matters:  Every one of these requests now creates its own session file, including a copy of sensitive settings such as the payment key — data that shouldn't exist there in the first place.
+
+Answer: G Bilkul kiyon k is main Socket run ho raha hai jo ye check kar raha hai k user kisi aur platform se logout tu nahi kia Auth0 laga hua hai aur thirdparty confirm kar rahi hai user session 
+
+F-27  A key connection detail is trusted without verification
+
+The system trusts an incoming signal about whether a connection is secure, without first checking that the signal is coming from a trusted source.
+
+Why it matters:  This could allow links, redirects, and secure-link generation to be manipulated in unintended ways.
+
+Answer: G Bilkul kiyon k is main Socket run ho raha hai jo ye check kar raha hai k user kisi aur platform se logout tu nahi kia Auth0 laga hua hai aur thirdparty confirm kar rahi hai user session 
+
+F-44  Errors are hidden instead of being recorded
+
+When certain parts of the system encounter a problem, they quietly return an empty result rather than logging what actually went wrong.
+
+Why it matters:  A genuine outage becomes indistinguishable from "there's simply nothing to show," making problems hard to detect, and a slow outside service can cause requests to hang for up to a minute at a time.
+
+Answer: Log maintain Orderlog,paymentlog,emaillog ye sab logs maintain ho rahay han 
+
+F-35  Permission checks rely on guesswork rather than a defined list
+
+The system partly decides what a user is allowed to do by matching keywords found in the web address, which can produce unintended matches.
+
+Why it matters:  This can accidentally grant weaker or stronger permissions than intended, and simply renaming a feature could silently change who is allowed to use it.
+
+Answer: nahi ye sab mjay api se pata chall raha hai aisa kuch nahi hai k url se mjay pata chall raha hon proper Permission check ho rahi hai 
+
+F-33  The system's internal web addresses are inconsistent
+
+The structure used for the system's various pages and actions doesn't follow a consistent, standard pattern.
+
+Why it matters:  This adds ongoing maintenance cost and makes the permission-matching problem above harder to predict and control.
+
+F-34  Some code uses an outdated method that's easy to break by accident
+
+Around sixty routes rely on an old way of connecting web addresses to code, a method removed from the underlying framework years ago and now working only through an unrelated workaround.
+
+Why it matters:  This makes it easy for a small typo to go unnoticed by standard tools and only surface as an error when a real user visits the affected page.
+
+Answer: woh routes ab use nahi ho rahay hum current scope may 
+
+F-36  One page is completely broken
+
+Part of the code refers to a feature that doesn't actually exist in the project.
+
+Why it matters:  Visiting this specific page always results in an error. A working alternative already exists elsewhere, so this appears to be redundant, broken code rather than a missing feature.
+
+Answer: hosakta hai lekin may jitnay pooranay routes hain aur jo use nahi ho rahay unko hata donga 
+
+F-41  The system doesn't clearly define how some key data should be handled
+
+Money values are treated as plain text rather than numbers, dates aren't handled through a proper date system, and certain business rules are applied manually in hundreds of places instead of automatically.
+
+Why it matters:  This can lead to small rounding errors in financial figures, and a single missed check could let one customer's data accidentally become visible to another.
+
+Answer: han inki db may type change karni paray gi 
+
+F-31  Order numbers can collide under heavy traffic
+
+Order numbers are generated using a basic random-number method with a uniqueness check that isn't fully protected against two orders happening at the exact same moment.
+
+Why it matters:  Two customers could theoretically end up with the same order number, and because the numbers are relatively easy to guess, this is also a minor security concern.
+
+Answer: nahi ordernumber unique hain dublicate nahi ho saktay aur ye dono site check ho rahay hain thirparty api may bhi aur humare pass bhi 
+
+F-40  Saving a batch of items is inefficient
+
+Saving a group of products triggers far more individual database operations than necessary.
+
+Why it matters:  Saving takes longer than it should, and if something fails partway through (see the order-processing issue above), it can leave behind incomplete, orphaned data.
+
+Answer: han product ko modify k time ye operation perform hota hai kiyon k jis jis module may ye product use ho raha hota hai waha waha update hoti hain is ko check karonga k kia better way hai db performance and request optimization k liye
+
+F-45  Time-sensitive outside calls happen during normal page loads
+
+Several features that contact outside services do so in real time rather than in the background, with generous wait times of up to two minutes.
+
+Why it matters:  A single slow request can tie up server resources for minutes at a time, and if the outside service slows down, it can exhaust the server's capacity to handle other requests.
+
+Answer: han is create k time data fetch ho raha hai thirdparty api se product le kar ata hai aur show kartay hain is ko background may job bana kar call nahi kar saktay kiyon k data on load pe show karwana ha han agar post ki request hoti tu ye kaam hum kar saktay thay  k background may job challti rahay aur user koi aur action perform kar le wait na karna paray
+
+F-04  Tens of thousands of lines of unused, duplicate code remain in the project
+
+Old backup copies of application code and pages are still present in the project despite not being used anywhere.
+
+Why it matters:  Searches and reviews of the code often turn up two versions of the same thing, and fixes are sometimes mistakenly applied to the unused copy, accomplishing nothing.
+
+Answer: han is may dashboard backup ka folder banaya gaya tha woh abhi kisi kaam ka nahi hai hum usay delete karden gay
+
+F-05  Leftover code from a previous website platform remains in the project
+
+Roughly half a megabyte of code from an older, unrelated website platform is still present in the project, unused.
+
+Why it matters:  This is unnecessary clutter that shares the same weak protection noted elsewhere, and it also reveals some internal technical details about a development environment.
+
+Answer: han is may dashboard backup ka aur poorani backup file delete kardengay
+
+F-02  The project contains two separate, duplicate sets of dependencies
+
+An unused, duplicate copy of the external code libraries the system relies on exists alongside the copy that's actually in use.
+
+Why it matters:  Standard security-scanning tools may end up checking the wrong copy, giving a false sense of safety if a known issue is fixed only in the unused set.
+
+Answer: poorani backup file delete kardengay
+
+LOW — 5 findings
+
+Hygiene and consistency issues. Negligible direct risk today, but a cumulative cost to long-term maintainability.
+
+F-29  Errors are frequently silenced rather than surfaced
+
+Over 1,500 places in the code are set up to quietly hide errors instead of reporting them, including in some security-related logic.
+
+Why it matters:  While this doesn't currently create an open door, it does mean real problems can go unnoticed and become harder to diagnose.
+
+Answer: ok i checked 
+
+F-46  Over a thousand lines of old, disabled code remain in the project
+
+Multiple old versions of the same feature are left disabled alongside the version currently in use.
+
+Why it matters:  It's unclear which version is actually correct or intended, which adds confusion for anyone maintaining the code later.
+
+Answer: Purana aur Disabled Code may delete kardonga 
+
+F-07  Unnecessary leftover files remain in the public folder
+
+Old backup files, an installer package, and other unused files are still present in the folder the website serves to the public.
+
+Why it matters:  These raise the possibility that old installation or setup tools could still be reachable by visitors.
+
+Answer: ok i check and delete this files
+
+F-08  Search engines are allowed to index the entire site, including admin areas
+
+The file that's supposed to tell search engines which areas not to scan doesn't actually restrict anything.
+
+Why it matters:  Admin pages can become discoverable through search engines, and automated crawlers may end up triggering some of the risky delete-by-link issues noted above.
+
+Answer: isko check karonga seo related point ha ye 
+
+F-37  Unused, confusing leftover routes remain in the system
+
+Several unused, duplicate, or fully disabled pieces of routing configuration remain in the project.
+
+Why it matters:  This adds clutter and makes it harder to tell a genuine "page not found" error from a simple typo in the code.
+
+Answer: Unused Routes delete karden gay
